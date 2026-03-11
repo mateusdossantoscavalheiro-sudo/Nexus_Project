@@ -1,3 +1,5 @@
+#include <WiFi.h>
+#include <PubSubClient.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <DHTesp.h>
@@ -5,78 +7,128 @@
 #include <Adafruit_Sensor.h>
 #include <ESP32Servo.h>
 
-// Definições de Pinos (Conforme seu JSON e testes de sucesso)
+// --- Configuration & Pinout ---
 #define DHT_PIN    15
 #define POT_PIN    34
-#define LED_PIN    12  // O pino que "funfou" legal!
+#define LED_PIN    12
 #define SERVO_PIN  13
 #define I2C_ADDR   0x27
 
+// --- Network Credentials (Wokwi Standard) ---
+const char* ssid = "Wokwi-GUEST";
+const char* password = "";
+const char* mqtt_server = "broker.hivemq.com"; // Public broker for testing
+
+WiFiClient espClient;
+PubSubClient client(espClient);
 LiquidCrystal_I2C lcd(I2C_ADDR, 20, 4);
 DHTesp dht;
 Adafruit_MPU6050 mpu;
-Servo meuServo;
+Servo latheMotor;
+
+// --- Lathe Simulation Variables ---
+int motorSpeed = 0;
+unsigned long lastMsg = 0;
+
+void setup_wifi() {
+  delay(10);
+  Serial.println("Connecting to Nexus Network...");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi Connected. IP: " + WiFi.localIP().toString());
+}
+
+void reconnect() {
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    if (client.connect("NexusClient_Motor01")) { // Device ID for scalability
+      Serial.println("Connected to Broker");
+    } else {
+      delay(5000);
+    }
+  }
+}
 
 void setup() {
   Serial.begin(115200);
-  
-  // Configuração LED
-  pinMode(LED_PIN, OUTPUT);
-  
-  // Configuração Servo
-  ESP32PWM::allocateTimer(0);
-  meuServo.setPeriodHertz(50);
-  meuServo.attach(SERVO_PIN, 500, 2400);
+  setup_wifi();
+  client.setServer(mqtt_server, 1883);
 
-  // Inicialização LCD e Barramento I2C
+  pinMode(LED_PIN, OUTPUT);
+  ESP32PWM::allocateTimer(0);
+  latheMotor.setPeriodHertz(50);
+  latheMotor.attach(SERVO_PIN, 500, 2400);
+
   Wire.begin(21, 22);
   lcd.init();
   lcd.backlight();
   lcd.setCursor(4, 0);
   lcd.print("NEXUS SYSTEM");
-  lcd.setCursor(2, 2);
-  lcd.print("INICIALIZANDO...");
+  lcd.setCursor(1, 2);
+  lcd.print("V2: MQTT ENABLED");
 
-  // Inicialização Sensores
   dht.setup(DHT_PIN, DHTesp::DHT22);
-  if (!mpu.begin()) {
-    Serial.println("MPU6050 nao encontrado!");
-  }
+  if (!mpu.begin()) Serial.println("MPU6050 Error!");
 
   delay(2000);
   lcd.clear();
 }
 
 void loop() {
-  // --- 1. LEITURA DOS DADOS ---
+  if (!client.connected()) reconnect();
+  client.loop();
+
+  // --- Data Acquisition ---
   TempAndHumidity data = dht.getTempAndHumidity();
   int potValue = analogRead(POT_PIN);
-  float correnteSimulada = (potValue / 4095.0) * 15.0; // Escala 0-15A
-  
+  float currentSim = (potValue / 4095.0) * 15.0;
+
   sensors_event_t a, g, temp;
   mpu.getEvent(&a, &g, &temp);
 
-  // --- 2. AÇÃO DO HARDWARE (LED e SERVO) ---
-  digitalWrite(LED_PIN, HIGH); // Liga sinalizador
-  meuServo.write(180);         // Gira motor para posição A
-  
-  // --- 3. EXIBIÇÃO NO LCD ---
+  // --- Lathe Logic & Hardware Action ---
+  // LED stays ON while system is operational
+  digitalWrite(LED_PIN, HIGH);
+
+  // Smooth Lathe rotation simulation (0 to 180 oscillation)
+  for(int pos = 0; pos <= 180; pos += 5) {
+    latheMotor.write(pos);
+    delay(15);
+  }
+
+  // --- HMI Update (LCD) ---
   lcd.setCursor(0, 0);
-  lcd.print("Temp: "); lcd.print(data.temperature, 1); lcd.print(" C  ");
-  
+  lcd.print("T:"); lcd.print(data.temperature, 1); lcd.print("C ");
+  lcd.print("H:"); lcd.print(data.humidity, 1); lcd.print("%");
+
   lcd.setCursor(0, 1);
-  lcd.print("Corrente: "); lcd.print(correnteSimulada, 1); lcd.print(" A ");
-  
+  lcd.print("Current: "); lcd.print(currentSim, 1); lcd.print("A");
+
   lcd.setCursor(0, 2);
-  lcd.print("Vibracao: "); lcd.print(a.acceleration.x, 2);
-  
+  lcd.print("Vib X: "); lcd.print(a.acceleration.x, 2);
+
   lcd.setCursor(0, 3);
-  lcd.print("STATUS: ON");
+  lcd.print("NET: CONNECTED");
 
-  delay(1000); // Mantém por 1 segundo
+  // --- Data Export (MQTT Payload) ---
+  // Sends data every 2 seconds to avoid flooding
+  long now = millis();
+  if (now - lastMsg > 2000) {
+    lastMsg = now;
 
-  // Pequeno movimento de retorno para testar dinâmica
-  digitalWrite(LED_PIN, LOW);  // Pisca sinalizador
-  meuServo.write(0);           // Volta motor para posição B
-  delay(1000);
+    // Creating a JSON-like string for Java backend
+    String payload = "{\"id\":1,\"temp\":";
+    payload += data.temperature;
+    payload += ",\"curr\":";
+    payload += currentSim;
+    payload += ",\"vib\":";
+    payload += a.acceleration.x;
+    payload += "}";
+
+    client.publish("nexus/motor/1/telemetry", payload.c_str());
+    Serial.println("Payload Sent: " + payload);
+  }
 }
