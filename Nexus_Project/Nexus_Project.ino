@@ -71,7 +71,7 @@ void loop() {
   lcd.print("Vibracao: "); lcd.print(a.acceleration.x, 2);
   
   lcd.setCursor(0, 3);
-  lcd.print("STATUS: ATIVO");
+  lcd.print("STATUS: ON");
 
   delay(1000); // Mantém por 1 segundo
 
