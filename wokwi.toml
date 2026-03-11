@@ -1,4 +1,4 @@
 [wokwi]
 version = 1
-firmware = 'build/esp32.esp32.esp32/Nexus_Project.ino.bin'
-elf = 'build/esp32.esp32.esp32/Nexus_Project.ino.elf'
+firmware = 'build/Nexus_Project.ino.bin'
+elf = 'build/Nexus_Project.ino.elf'
