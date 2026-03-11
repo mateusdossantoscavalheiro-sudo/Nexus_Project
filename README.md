@@ -4,7 +4,7 @@
   
   **`[ S I S T E M A   D E   M O N I T O R A M E N T O   I N D U S T R I A L ]`**
 
-  ![System](https://img.shields.io/badge/STATUS-OPERATIONAL-00FF00?style=for-the-badge&logo=codeforces&logoColor=black)
+  ![System](https://img.shields.io/badge/STATUS-EM-DESENVOLVIMENTO-00FF00?style=for-the-badge&logo=codeforces&logoColor=black)
   ![Core](https://img.shields.io/badge/CORE-ESP32-black?style=for-the-badge&logo=espressif&logoColor=white)
   ![Security](https://img.shields.io/badge/SECURITY-LEVEL_ALPHA-red?style=for-the-badge&logo=kalilinux&logoColor=white)
 </div>
