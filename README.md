@@ -1,5 +1,4 @@
 <div align="center">
-  <img src="logo.png" alt="NEXUS TECNOLOGIA" width="250"/>
   
   # ＮＥＸＵＳ ＰＲＯＪＥＣＴ // ＥＳＰ３２
   
