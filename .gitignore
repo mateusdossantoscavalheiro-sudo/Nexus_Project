@@ -1,0 +1,16 @@
+# Ignorar arquivos de compilação (o "lixo" do compilador)
+build/
+*.elf
+*.bin
+*.map
+*.hex
+
+# Ignorar executáveis e logs
+arduino-cli.exe
+*.txt
+!README.md
+!LICENSE
+
+# Ignorar pastas ocultas do IDE
+.idea/
+.vscode/
