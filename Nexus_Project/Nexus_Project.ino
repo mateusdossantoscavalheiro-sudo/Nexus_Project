@@ -119,9 +119,11 @@ void loop() {
   if (now - lastMsg > 2000) {
     lastMsg = now;
 
-    // Creating a JSON-like string for Java backend
+    // Updated JSON to include Humidity (humi)
     String payload = "{\"id\":1,\"temp\":";
     payload += data.temperature;
+    payload += ",\"humi\":";
+    payload += data.humidity;
     payload += ",\"curr\":";
     payload += currentSim;
     payload += ",\"vib\":";
