@@ -68,7 +68,7 @@ void loop() {
   lcd.print("Corrente: "); lcd.print(correnteSimulada, 1); lcd.print(" A ");
   
   lcd.setCursor(0, 2);
-  lcd.print("Vibra X: "); lcd.print(a.acceleration.x, 2);
+  lcd.print("Vibracao: "); lcd.print(a.acceleration.x, 2);
   
   lcd.setCursor(0, 3);
   lcd.print("STATUS: ATIVO");
