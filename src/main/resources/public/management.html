@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NEXUS - Management</title>
+    <style>
+        body { background: #121212; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; }
+        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 30px; }
+        .admin-badge { background: #ff9800; color: black; padding: 5px 10px; border-radius: 5px; font-weight: bold; font-size: 0.8rem; }
+        table { width: 100%; border-collapse: collapse; background: #1e1e1e; border-radius: 10px; overflow: hidden; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #333; }
+        th { background: #252525; color: #2196f3; }
+        .btn-del { background: #f44336; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; }
+        .btn-del:disabled { background: #444; cursor: not-allowed; }
+        .add-box { background: #1e1e1e; padding: 20px; border-radius: 10px; margin-top: 30px; border: 1px dashed #444; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div>
+        <h1>System Supervision</h1>
+        <span class="admin-badge">ADMIN ACCESS</span>
+    </div>
+    <button onclick="location.href='login.html'" style="background:none; color:#888; border:1px solid #444; cursor:pointer; padding:5px 10px;">Logout</button>
+</header>
+
+<h3>Registered Engines</h3>
+<table>
+    <thead>
+    <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Location</th>
+        <th>Current Status</th>
+        <th>Actions</th>
+    </tr>
+    </thead>
+    <tbody id="engine-table">
+    <tr>
+        <td>1</td>
+        <td>Main Lathe #01</td>
+        <td>Sector A</td>
+        <td id="status-1">STOPPED</td>
+        <td><button class="btn-del" id="del-1" onclick="deleteEngine(1)">Remove</button></td>
+    </tr>
+    </tbody>
+</table>
+
+<div class="add-box">
+    <h3>Register New Engine</h3>
+    <input type="text" placeholder="Engine ID" style="padding: 8px;">
+    <input type="text" placeholder="Name" style="padding: 8px;">
+    <button style="background:#4caf50; color:white; border:none; padding:8px 20px; border-radius:5px; cursor:pointer;">Add to Network</button>
+</div>
+
+<script>
+    // Later we will connect this to the Java WebSocket to check status
+    // and enable/disable the delete button automatically.
+    function deleteEngine(id) {
+        const status = document.getElementById('status-' + id).innerText;
+        if(status === "OPERATING") {
+            alert("Security Breach: Cannot remove a running engine!");
+        } else {
+            if(confirm("Are you sure you want to remove Engine " + id + "?")) {
+                alert("Engine removed from system.");
+                // Here we will send a command to Java to remove from the list
+            }
+        }
+    }
+</script>
+
+</body>
+</html>

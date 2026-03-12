@@ -4,183 +4,188 @@ import org.eclipse.paho.client.mqttv3.*;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.json.JSONObject;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
 
 public class NexusSubscriber {
 
-    // --- ANSI Colors (Keep existing) ---
-    public static final String RESET = "\u001B[0m";
-    public static final String RED = "\u001B[31m";
-    public static final String YELLOW = "\u001B[33m";
-    public static final String GREEN = "\u001B[32m";
-
-    // --- System States (New Industrial Logic) ---
-    enum MotorState { OPERATING, STOPPED, LOCKED_FAILURE, MAINTENANCE }
-    private static MotorState currentState = MotorState.STOPPED;
-
-    // Timer for 5s persistence
-    private static long errorStartTime = 0;
-    private static final int ERROR_THRESHOLD_MS = 5000;
-
-    // MQTT & Web Config
-    private static MqttClient mqttClient;
-    private static final String TELEMETRY_TOPIC = "nexus/motor/1/telemetry";
-    private static final String CONTROL_TOPIC = "nexus/motor/1/control";
-    private static final ConcurrentHashMap<String, WsContext> webClients = new ConcurrentHashMap<>();
+    // Storage for all active engines and web sessions
+    private static final Map<Integer, MotorData> engineFleet = new ConcurrentHashMap<>();
+    private static final Map<String, WsContext> sessions = new ConcurrentHashMap<>();
+    private static IMqttClient mqttClient;
 
     public static void main(String[] args) {
-        // 1. Initialize Javalin Server (HMI)
+        // Initialize default engine for testing
+        engineFleet.put(1, new MotorData(1, "Main Lathe #01"));
+
+        // --- Javalin Server Setup ---
         var app = Javalin.create(config -> {
-            config.staticFiles.add("/public"); // Folder for index.html
+            config.staticFiles.add("/public"); // index.html (Login) is served here
         }).start(8080);
 
-        // 2. WebSocket Connection (Bridge to Browser)
+        // --- WebSocket Bridge (Frontend <-> Java) ---
         app.ws("/ws", ws -> {
-            ws.onConnect(ctx -> webClients.put(ctx.sessionId(), ctx));
-            ws.onClose(ctx -> webClients.remove(ctx.sessionId()));
-            ws.onMessage(ctx -> handleIhmCommands(ctx.message()));
+            ws.onConnect(ctx -> {
+                sessions.put(ctx.sessionId(), ctx);
+                System.out.println("[WS] New session connected: " + ctx.sessionId());
+            });
+
+            ws.onClose(ctx -> sessions.remove(ctx.sessionId()));
+
+            ws.onMessage(ctx -> {
+                String message = ctx.message();
+                handleWebCommand(message);
+            });
         });
 
-        System.out.println(GREEN + "NEXUS SERVER: HMI running at http://localhost:8080" + RESET);
+        // --- MQTT Setup (Wokwi <-> Java) ---
+        setupMQTT();
 
-        // 3. Initialize MQTT (Existing Logic)
-        setupMqtt();
+        System.out.println("\n--------------------------------------");
+        System.out.println("NEXUS SYSTEM STARTING...");
+        System.out.println("HMI available at http://localhost:8080");
+        System.out.println("--------------------------------------\n");
     }
 
-    private static void setupMqtt() {
+    private static void setupMQTT() {
         String broker = "tcp://broker.hivemq.com:1883";
-        String clientId = "JavaServer_Nexus_Analytics";
+        String clientId = "NexusServer_" + System.currentTimeMillis();
 
         try {
             mqttClient = new MqttClient(broker, clientId, new MemoryPersistence());
-            MqttConnectOptions connOpts = new MqttConnectOptions();
-            connOpts.setCleanSession(true);
+            MqttConnectOptions options = new MqttConnectOptions();
+            options.setCleanSession(true);
 
-            System.out.println("NEXUS SYSTEM: Connecting to broker...");
-            mqttClient.connect(connOpts);
-            System.out.println("STATUS: Connected. Monitoring Motor 1...\n");
+            mqttClient.connect(options);
 
-            mqttClient.setCallback(new MqttCallback() {
-                public void messageArrived(String topic, MqttMessage message) {
-                    try {
-                        String payload = new String(message.getPayload());
-                        processMotorLogic(payload);
-                    } catch (Exception e) {
-                        System.err.println("Error processing data: " + e.getMessage());
+            // Subscribe to all motor telemetries using wildcard (+)
+            mqttClient.subscribe("nexus/motor/+/telemetry", (topic, msg) -> {
+                try {
+                    JSONObject json = new JSONObject(new String(msg.getPayload()));
+                    int id = json.getInt("id");
+
+                    if (engineFleet.containsKey(id)) {
+                        MotorData motor = engineFleet.get(id);
+                        motor.update(json);
+
+                        // Broadcast updated state to all web clients
+                        broadcastToWeb(motor.toJson());
                     }
+                } catch (Exception e) {
+                    System.err.println("Error processing telemetry: " + e.getMessage());
                 }
-                public void connectionLost(Throwable cause) { System.out.println(RED + "Connection Lost!" + RESET); }
-                public void deliveryComplete(IMqttDeliveryToken token) {}
             });
 
-            mqttClient.subscribe(TELEMETRY_TOPIC);
-        } catch (MqttException e) { e.printStackTrace(); }
-    }
-
-    private static void processMotorLogic(String payload) {
-        JSONObject data = new JSONObject(payload);
-        int id = data.getInt("id");
-        double temp = data.getDouble("temp");
-        double humi = data.getDouble("humi");
-        double curr = data.getDouble("curr");
-        double vib = data.getDouble("vib");
-
-        // Safety Analysis (Keep existing methods)
-        String st = analyzeTemperature(temp);
-        String sc = analyzeCurrent(curr);
-        String sh = analyzeHumidity(humi);
-        String sv = analyzeVibration(vib);
-
-        // --- 5 SECONDS PERSISTENCE LOGIC ---
-        boolean hasCriticalError = st.contains(RED) || sc.contains(RED) || sh.contains(RED) || sv.contains(RED);
-
-        if (hasCriticalError && currentState == MotorState.OPERATING) {
-            if (errorStartTime == 0) errorStartTime = System.currentTimeMillis();
-
-            long elapsed = System.currentTimeMillis() - errorStartTime;
-            if (elapsed >= ERROR_THRESHOLD_MS) {
-                System.out.println(RED + "!! CRITICAL PERSISTENCE DETECTED (5s) !!" + RESET);
-                changeState(MotorState.LOCKED_FAILURE);
-            }
-        } else {
-            errorStartTime = 0; // Reset timer if error disappears
-        }
-
-        // Render to Terminal (Keep existing view)
-        if (currentState != MotorState.MAINTENANCE) {
-            renderDashboard(id, temp, st, curr, sc, humi, sh, vib, sv);
-        }
-
-        // Broadcast to HMI
-        data.put("state", currentState.toString());
-        broadcastToIhm(data.toString());
-    }
-
-    private static void handleIhmCommands(String command) {
-        // Logic Rules: Cannot start if locked or in maintenance
-        switch (command) {
-            case "START":
-                if (currentState == MotorState.STOPPED) changeState(MotorState.OPERATING);
-                break;
-            case "STOP":
-                if (currentState == MotorState.OPERATING) changeState(MotorState.STOPPED);
-                break;
-            case "MAINTENANCE_IN":
-                changeState(MotorState.MAINTENANCE);
-                break;
-            case "MAINTENANCE_OUT":
-                if (currentState == MotorState.MAINTENANCE) changeState(MotorState.STOPPED);
-                break;
+        } catch (MqttException e) {
+            System.err.println("MQTT Connection Failed: " + e.getMessage());
         }
     }
 
-    private static void changeState(MotorState newState) {
-        currentState = newState;
-        System.out.println(YELLOW + "STATE CHANGED TO: " + newState + RESET);
-
-        // Command ESP32 via MQTT
-        String mqttCmd = (newState == MotorState.OPERATING) ? "START" : "STOP";
+    private static void handleWebCommand(String fullCommand) {
+        // Expected format "motorId:COMMAND" (e.g., "1:START")
         try {
-            mqttClient.publish(CONTROL_TOPIC, new MqttMessage(mqttCmd.getBytes()));
-        } catch (MqttException e) { e.printStackTrace(); }
+            String[] parts = fullCommand.split(":");
+            int motorId = Integer.parseInt(parts[0]);
+            String action = parts[1];
+
+            String topic = "nexus/motor/" + motorId + "/control";
+            MqttMessage message = new MqttMessage(action.getBytes());
+            mqttClient.publish(topic, message);
+
+            System.out.println("[CMD] Sent " + action + " to Motor " + motorId);
+
+            // If command is maintenance related, update state manually
+            if(action.equals("MAINTENANCE_IN")) engineFleet.get(motorId).state = "MAINTENANCE";
+            if(action.equals("MAINTENANCE_OUT")) engineFleet.get(motorId).state = "STOPPED";
+
+        } catch (Exception e) {
+            System.err.println("Invalid command format: " + fullCommand);
+        }
     }
 
-    private static void broadcastToIhm(String data) {
-        webClients.values().forEach(ctx -> ctx.send(data));
+    private static void broadcastToWeb(String data) {
+        sessions.values().forEach(s -> {
+            if (s.session.isOpen()) s.send(data);
+        });
     }
 
-    // --- Existing Methods (Exactly as they were) ---
-    private static void renderDashboard(int id, double t, String st, double c, String sc, double h, String sh, double v, String sv) {
-        System.out.println("==================================================");
-        System.out.println("MOTOR " + id + " - STATUS: " + currentState);
-        System.out.println("--------------------------------------------------");
-        System.out.printf("Temperature : %5.1f °C  -> %s\n", t, st);
-        System.out.printf("Current     : %5.1f A   -> %s\n", c, sc);
-        System.out.printf("Humidity    : %5.1f %%   -> %s\n", h, sh);
-        System.out.printf("Vibration   : %5.2f     -> %s\n", v, sv);
-        System.out.println("==================================================\n");
-    }
+    // --- Inner Class for Engine Representation ---
+    static class MotorData {
+        int id;
+        String name;
+        double temp, humi, curr, vib;
+        String state = "STOPPED";
 
-    private static String analyzeTemperature(double temp) {
-        if (temp >= 60.0) return RED + "[RED]: Critical!" + RESET;
-        if (temp >= 45.0) return YELLOW + "[YELLOW]: Warning" + RESET;
-        return GREEN + "[GREEN]: OK" + RESET;
-    }
+        // Timer for safety logic
+        private long errorStartTime = 0;
+        private final long ERROR_THRESHOLD_MS = 5000;
 
-    private static String analyzeCurrent(double curr) {
-        if (curr >= 12.0) return RED + "[RED]: Critical!" + RESET;
-        if (curr >= 8.0) return YELLOW + "[YELLOW]: Warning" + RESET;
-        return GREEN + "[GREEN]: OK" + RESET;
-    }
+        public MotorData(int id, String name) {
+            this.id = id;
+            this.name = name;
+        }
 
-    private static String analyzeHumidity(double humi) {
-        if (humi >= 70.0) return RED + "[RED]: Critical!" + RESET;
-        if (humi >= 50.0) return YELLOW + "[YELLOW]: Warning" + RESET;
-        return GREEN + "[GREEN]: OK" + RESET;
-    }
+        public void update(JSONObject json) {
+            this.temp = json.getDouble("temp");
+            this.humi = json.getDouble("humi");
+            this.curr = json.getDouble("curr");
+            this.vib = json.getDouble("vib");
 
-    private static String analyzeVibration(double vib) {
-        if (vib >= 9.0) return RED + "[RED]: Critical!" + RESET;
-        if (vib >= 5.0) return YELLOW + "[YELLOW]: Warning" + RESET;
-        return GREEN + "[GREEN]: OK" + RESET;
+            // 1. CRITICAL: Overheating Logic (5-second persistence)
+            if (temp > 60.0 && state.equals("OPERATING")) {
+                if (errorStartTime == 0) errorStartTime = System.currentTimeMillis();
+                if (System.currentTimeMillis() - errorStartTime > ERROR_THRESHOLD_MS) {
+                    triggerSafetyLock("OVERHEAT");
+                }
+            }
+            // 2. CRITICAL: Electrical Overload (Instant shutdown if Current > 14A)
+            else if (curr > 14.0 && state.equals("OPERATING")) {
+                triggerSafetyLock("ELECTRICAL OVERLOAD");
+            }
+            // 3. CRITICAL: Mechanical Failure (Instant shutdown if Vibration > 10G)
+            else if (vib > 10.0 && state.equals("OPERATING")) {
+                triggerSafetyLock("EXCESSIVE VIBRATION");
+            }
+            else {
+                errorStartTime = 0; // Reset timer if conditions are normal
+            }
+
+            // 4. WARNINGS: Environment & Maintenance Alerts (Console only, no shutdown)
+            checkWarnings();
+        }
+
+        private void triggerSafetyLock(String reason) {
+            this.state = "LOCKED_FAILURE";
+            sendCommandToHardware("STOP");
+            System.out.println("\n[!!!] EMERGENCY SHUTDOWN - Motor " + id + " (" + name + ")");
+            System.out.println("[REASON]: " + reason);
+        }
+
+        private void checkWarnings() {
+            if (humi > 75.0) {
+                System.out.println("[WARN] High Humidity on Motor " + id + ": " + humi + "%");
+            }
+            if (curr > 10.0 && curr <= 14.0) {
+                System.out.println("[WARN] High Current on Motor " + id + ": " + curr + "A");
+            }
+        }
+
+        private void sendCommandToHardware(String cmd) {
+            try {
+                String topic = "nexus/motor/" + id + "/control";
+                mqttClient.publish(topic, new MqttMessage(cmd.getBytes()));
+            } catch (Exception e) { e.printStackTrace(); }
+        }
+
+        public String toJson() {
+            JSONObject json = new JSONObject();
+            json.put("id", id);
+            json.put("name", name);
+            json.put("temp", temp);
+            json.put("humi", humi);
+            json.put("curr", curr);
+            json.put("vib", vib);
+            json.put("state", state);
+            return json.toString();
+        }
     }
 }
