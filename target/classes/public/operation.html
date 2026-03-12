@@ -34,14 +34,20 @@
 </head>
 <body>
 
-<header>
-    <h1>NEXUS PROJECT - ENGINE MONITORING</h1>
+<header style="position: relative;"> <h1>NEXUS PROJECT - ENGINE MONITORING</h1>
     <div id="motor-selector">
         <label>Selected Device: </label>
         <select style="background:#333; color:white; padding:5px; border-radius:5px;">
             <option>Motor #001 (Main Lathe)</option>
         </select>
     </div>
+
+    <button onclick="location.href='index.html'"
+            style="position: absolute; top: 20px; right: 20px; background:none; color:#888; border:1px solid #444; cursor:pointer; padding:8px 15px; border-radius: 5px; font-size: 0.8rem; transition: 0.3s;"
+            onmouseover="this.style.color='white'; this.style.borderColor='var(--red)'"
+            onmouseout="this.style.color='#888'; this.style.borderColor='#444'">
+        LOGOUT
+    </button>
 </header>
 
 <div id="state-display" class="status-banner STOPPED">STATUS: STOPPED</div>
@@ -100,6 +106,13 @@
         document.getElementById('btn-maint-in').disabled = (state === 'OPERATING' || state === 'MAINTENANCE');
         document.getElementById('btn-maint-out').disabled = (state !== 'MAINTENANCE');
 
+        // Ajuste nos botões para o modo manutenção
+        const state = data.state;
+        document.getElementById('btn-start').disabled = (state !== 'STOPPED' && state !== 'MAINTENANCE');
+        document.getElementById('btn-stop').disabled = (state !== 'OPERATING');
+        document.getElementById('btn-maint-in').disabled = (state !== 'STOPPED');
+        document.getElementById('btn-maint-out').disabled = (state !== 'MAINTENANCE');
+
         // Visual Colors for Cards
         updateCardColor('temp', data.temp, 45, 60);
         updateCardColor('curr', data.curr, 8, 12);
@@ -115,7 +128,12 @@
     }
 
     function sendCommand(cmd) {
-        ws.send(cmd);
+        // We hardcode "1" for now because it's your only motor.
+        // The Java now expects "ID:COMMAND"
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send("1:" + cmd);
+            console.log("Sent to Java: 1:" + cmd);
+        }
     }
 </script>
 

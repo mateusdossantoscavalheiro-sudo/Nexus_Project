@@ -25,6 +25,8 @@ DHTesp dht;
 Adafruit_MPU6050 mpu;
 Servo latheMotor;
 
+bool maintenanceMode = false;
+
 // ESTADO INICIAL: Falso (Parado aguardando comando da IHM)
 bool systemActive = false;
 unsigned long lastMsg = 0;
@@ -42,12 +44,23 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   if (message == "STOP") {
     systemActive = false;
+    maintenanceMode = false; // Sai da manutenção se parar
     digitalWrite(LED_PIN, LOW);
-    latheMotor.write(90); // Posição de descanso
+    latheMotor.write(90);
     lcd.clear();
   }
   else if (message == "START") {
     systemActive = true;
+    maintenanceMode = false;
+    lcd.clear();
+  }
+  else if (message == "MAINTENANCE_IN") {
+    systemActive = false;
+    maintenanceMode = true;
+    lcd.clear();
+  }
+  else if (message == "MAINTENANCE_OUT") {
+    maintenanceMode = false;
     lcd.clear();
   }
 }
@@ -135,19 +148,28 @@ void loop() {
   }
 
   // Envio de Telemetria (Acontece independente do motor estar rodando)
-  long now = millis();
-  if (now - lastMsg > 2000) {
-    lastMsg = now;
+    long now = millis();
+    if (now - lastMsg > 2000) {
+      lastMsg = now;
 
-    // Filtro Anti-Crash para o JSON
-    float t = isnan(data.temperature) ? 0.0 : data.temperature;
-    float h = isnan(data.humidity) ? 0.0 : data.humidity;
+      float t = isnan(data.temperature) ? 0.0 : data.temperature;
+      float h = isnan(data.humidity) ? 0.0 : data.humidity;
 
-    String payload = "{\"id\":1,\"temp\":" + String(t, 2) +
-                     ",\"humi\":" + String(h, 2) +
-                     ",\"curr\":" + String(currentSim, 2) +
-                     ",\"vib\":" + String(a.acceleration.x, 2) + "}";
+      // CRIAMOS UMA STRING DE STATUS PARA O JAVA ENTENDER
+      String motorStatus = "STOPPED";
+          if (maintenanceMode) {
+            motorStatus = "MAINTENANCE";
+          } else if (systemActive) {
+            motorStatus = "OPERATING";
+          }
 
-    client.publish("nexus/motor/1/telemetry", payload.c_str());
-  }
+      // ADICIONAMOS "state" NO JSON
+      String payload = "{\"id\":1,\"temp\":" + String(t, 2) +
+                       ",\"humi\":" + String(h, 2) +
+                       ",\"curr\":" + String(currentSim, 2) +
+                       ",\"vib\":" + String(a.acceleration.x, 2) +
+                       ",\"state\":\"" + motorStatus + "\"}"; // <--- ADICIONADO AQUI
+
+      client.publish("nexus/motor/1/telemetry", payload.c_str());
+    }
 }
