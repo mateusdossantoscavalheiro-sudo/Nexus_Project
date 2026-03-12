@@ -2,30 +2,35 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>NEXUS - Login</title>
+    <title>NEXUS - Industrial Login</title>
     <style>
-        body { background: #121212; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .login-card { background: #1e1e1e; padding: 40px; border-radius: 10px; border-top: 4px solid #2196f3; width: 300px; text-align: center; }
-        input { width: 100%; padding: 10px; margin: 10px 0; background: #333; border: 1px solid #444; color: white; border-radius: 5px; box-sizing: border-box; }
-        button { width: 100%; padding: 10px; background: #2196f3; border: none; color: white; font-weight: bold; border-radius: 5px; cursor: pointer; }
-        .error { color: #f44336; font-size: 0.8rem; margin-top: 10px; display: none; }
+        body { background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-card { background: #161616; padding: 40px; border-radius: 12px; border-top: 5px solid #2196f3; width: 320px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h2 { letter-spacing: 2px; margin-bottom: 25px; color: #2196f3; }
+        input { width: 100%; padding: 12px; margin: 10px 0; background: #222; border: 1px solid #333; color: white; border-radius: 6px; box-sizing: border-box; outline: none; }
+        input:focus { border-color: #2196f3; }
+        button { width: 100%; padding: 12px; background: #2196f3; border: none; color: white; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.3s; margin-top: 10px; }
+        button:hover { background: #1976d2; }
+        .error { color: #ff5252; font-size: 0.85rem; margin-top: 15px; display: none; background: rgba(255,82,82,0.1); padding: 8px; border-radius: 4px; }
     </style>
 </head>
 <body>
 <div class="login-card">
-    <h2>NEXUS LOGIN</h2>
-    <input type="text" id="user" placeholder="Username (admin or operator)">
+    <h2>NEXUS CORE</h2>
+    <input type="text" id="user" placeholder="Username">
     <input type="password" id="pass" placeholder="Password">
-    <button onclick="doLogin()">SIGN IN</button>
-    <div id="err" class="error">Invalid credentials!</div>
+    <button onclick="doLogin()">AUTHENTICATE</button>
+    <div id="err" class="error">Access Denied: Invalid Credentials</div>
 </div>
 
 <script>
     function doLogin() {
         const user = document.getElementById('user').value;
-        // Simple logic for now (later we can use Java for this)
-        if(user === "admin") window.location.href = "management.html";
-        else if(user === "operator") window.location.href = "operation.html";
+        const pass = document.getElementById('pass').value;
+
+        // Simple authentication logic (admin/operator)
+        if(user === "admin" && pass === "admin123") window.location.href = "management.html";
+        else if(user === "operator" && pass === "op123") window.location.href = "operation.html";
         else document.getElementById('err').style.display = "block";
     }
 </script>
