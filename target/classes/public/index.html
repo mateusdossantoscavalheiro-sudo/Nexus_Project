@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NEXUS - Industrial Dashboard</title>
+    <style>
+        :root {
+            --bg: #121212; --card: #1e1e1e; --text: #e0e0e0;
+            --green: #4caf50; --yellow: #ffeb3b; --red: #f44336; --blue: #2196f3;
+        }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; margin: 0; }
+        header { background: #000; width: 100%; padding: 20px; text-align: center; border-bottom: 2px solid var(--blue); }
+
+        .status-banner { padding: 10px 40px; border-radius: 5px; font-weight: bold; margin: 20px 0; font-size: 1.2rem; }
+        .OPERATING { background: var(--green); color: black; }
+        .STOPPED { background: #555; }
+        .LOCKED_FAILURE { background: var(--red); color: white; animation: blink 1s infinite; }
+        .MAINTENANCE { background: var(--blue); color: white; }
+
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; width: 90%; max-width: 1000px; }
+        .card { background: var(--card); padding: 20px; border-radius: 10px; text-align: center; border: 1px solid #333; }
+        .value { font-size: 2.5rem; font-weight: bold; margin: 10px 0; }
+        .unit { font-size: 1rem; color: #888; }
+
+        .controls { margin-top: 40px; background: var(--card); padding: 30px; border-radius: 10px; display: flex; gap: 15px; }
+        button { padding: 15px 30px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.3s; font-size: 1rem; }
+        button:disabled { opacity: 0.2; cursor: not-allowed; }
+        .btn-start { background: var(--green); }
+        .btn-stop { background: var(--red); }
+        .btn-maint { background: var(--blue); }
+
+        @keyframes blink { 50% { opacity: 0.5; } }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>NEXUS PROJECT - ENGINE MONITORING</h1>
+    <div id="motor-selector">
+        <label>Selected Device: </label>
+        <select style="background:#333; color:white; padding:5px; border-radius:5px;">
+            <option>Motor #001 (Main Lathe)</option>
+        </select>
+    </div>
+</header>
+
+<div id="state-display" class="status-banner STOPPED">STATUS: STOPPED</div>
+
+<div class="dashboard">
+    <div class="card" id="card-temp">
+        <div>Temperature</div>
+        <div class="value" id="val-temp">--</div>
+        <div class="unit">° Celsius</div>
+    </div>
+    <div class="card" id="card-curr">
+        <div>Current</div>
+        <div class="value" id="val-curr">--</div>
+        <div class="unit">Amperes</div>
+    </div>
+    <div class="card" id="card-humi">
+        <div>Humidity</div>
+        <div class="value" id="val-humi">--</div>
+        <div class="unit">% Relative</div>
+    </div>
+    <div class="card" id="card-vib">
+        <div>Vibration</div>
+        <div class="value" id="val-vib">--</div>
+        <div class="unit">G-Force (X)</div>
+    </div>
+</div>
+
+<div class="controls">
+    <button class="btn-start" id="btn-start" onclick="sendCommand('START')">START MOTOR</button>
+    <button class="btn-stop" id="btn-stop" onclick="sendCommand('STOP')">EMERGENCY STOP</button>
+    <button class="btn-maint" id="btn-maint-in" onclick="sendCommand('MAINTENANCE_IN')">ENTER MAINTENANCE</button>
+    <button class="btn-maint" id="btn-maint-out" onclick="sendCommand('MAINTENANCE_OUT')">EXIT MAINTENANCE</button>
+</div>
+
+<script>
+    const ws = new WebSocket("ws://" + location.host + "/ws");
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        // Update Values
+        document.getElementById('val-temp').innerText = data.temp.toFixed(1);
+        document.getElementById('val-curr').innerText = data.curr.toFixed(1);
+        document.getElementById('val-humi').innerText = data.humi.toFixed(1);
+        document.getElementById('val-vib').innerText = data.vib.toFixed(2);
+
+        // Update State Display
+        const stateDisp = document.getElementById('state-display');
+        stateDisp.innerText = "STATUS: " + data.state;
+        stateDisp.className = "status-banner " + data.state;
+
+        // Logic: Control Button States (Rules of the Game)
+        const state = data.state;
+        document.getElementById('btn-start').disabled = (state !== 'STOPPED');
+        document.getElementById('btn-stop').disabled = (state !== 'OPERATING');
+        document.getElementById('btn-maint-in').disabled = (state === 'OPERATING' || state === 'MAINTENANCE');
+        document.getElementById('btn-maint-out').disabled = (state !== 'MAINTENANCE');
+
+        // Visual Colors for Cards
+        updateCardColor('temp', data.temp, 45, 60);
+        updateCardColor('curr', data.curr, 8, 12);
+        updateCardColor('humi', data.humi, 50, 70);
+        updateCardColor('vib', data.vib, 5, 9);
+    };
+
+    function updateCardColor(id, value, warning, critical) {
+        const card = document.getElementById('card-' + id);
+        if (value >= critical) card.style.borderColor = 'var(--red)';
+        else if (value >= warning) card.style.borderColor = 'var(--yellow)';
+        else card.style.borderColor = '#333';
+    }
+
+    function sendCommand(cmd) {
+        ws.send(cmd);
+    }
+</script>
+
+</body>
+</html>
