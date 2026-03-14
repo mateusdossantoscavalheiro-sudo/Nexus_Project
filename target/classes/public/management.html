@@ -2,110 +2,228 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>NEXUS - Asset Management</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS - Management Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { background: #0f0f0f; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 30px; }
-        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 20px; margin-bottom: 40px; }
-        .badge { background: #ff9800; color: black; padding: 6px 12px; border-radius: 4px; font-weight: bold; font-size: 0.75rem; }
-        table { width: 100%; border-collapse: collapse; background: #161616; border-radius: 8px; overflow: hidden; }
-        th, td { padding: 18px; text-align: left; border-bottom: 1px solid #222; }
-        th { background: #1d1d1d; color: #2196f3; text-transform: uppercase; font-size: 0.85rem; }
-        .status-dot { height: 10px; width: 10px; background-color: #555; border-radius: 50%; display: inline-block; margin-right: 8px; }
-        .btn-logout { background: transparent; color: #888; border: 1px solid #333; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
-        .btn-logout:hover { border-color: #ff5252; color: #ff5252; }
+        /* Base Dark Theme (Default) */
+        :root {
+            --bg-color: #0f0f0f;
+            --panel-bg: #1a1a1a;
+            --text-main: #e0e0e0;
+            --text-muted: #888888;
+            --accent-blue: #2196f3;
+            --border-color: #333333;
+        }
+
+        body {
+            background: var(--bg-color); color: var(--text-main);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0; padding: 0; display: flex; height: 100vh; overflow: hidden;
+        }
+
+        /* Top Header */
+        header {
+            position: absolute; top: 0; left: 0; right: 0; height: 60px;
+            background: var(--panel-bg); border-bottom: 1px solid var(--border-color);
+            display: flex; justify-content: space-between; align-items: center; padding: 0 20px;
+            z-index: 10;
+        }
+
+        header a { color: var(--accent-blue); text-decoration: none; font-weight: bold; }
+        header a:hover { text-decoration: underline; }
+
+        /* Layout Container */
+        .app-container {
+            display: flex; width: 100%; margin-top: 60px; height: calc(100vh - 60px);
+        }
+
+        /* Main Dashboard Area (CSS Grid) */
+        .main-content {
+            flex-grow: 1; padding: 20px; overflow-y: auto;
+            display: grid;
+            grid-template-columns: 2fr 1fr; /* Left side wider than right */
+            grid-template-rows: auto auto 1fr;
+            gap: 20px;
+        }
+
+        /* Dashboard Cards/Panels */
+        .card {
+            background: var(--panel-bg); border-radius: 8px; padding: 20px;
+            border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .card h3 { margin-top: 0; color: var(--text-muted); font-size: 0.9rem; text-transform: uppercase; }
+
+        /* specific grid placements */
+        .kpi-row { grid-column: 1 / -1; display: flex; gap: 20px; }
+        .kpi-box { flex: 1; background: #222; padding: 15px; border-radius: 6px; text-align: center; }
+        .kpi-box span { display: block; font-size: 2rem; font-weight: bold; color: var(--accent-blue); }
+
+        .chart-line { grid-column: 1 / 2; min-height: 300px; }
+        .chart-pie { grid-column: 2 / 3; min-height: 300px; }
+        .alert-table { grid-column: 1 / -1; }
+
+        /* Right Sidebar */
+        .sidebar {
+            width: 280px; background: var(--panel-bg); border-left: 1px solid var(--border-color);
+            padding: 20px; display: flex; flex-direction: column; gap: 15px;
+        }
+
+        /* Buttons & Inputs */
+        select, button {
+            width: 100%; padding: 10px; border-radius: 4px; border: 1px solid var(--border-color);
+            background: var(--bg-color); color: var(--text-main); cursor: pointer;
+        }
+        button:hover { background: #333; }
+        .btn-logout { background: transparent; border-color: #ff5252; color: #ff5252; margin-top: auto; }
+        .btn-logout:hover { background: #ff5252; color: white; }
+
     </style>
 </head>
 <body>
 
 <header>
     <div>
-        <h1 style="margin:0">System Assets</h1>
-        <span class="badge">ADMINISTRATOR MODE</span>
+        <strong style="font-size: 1.2rem;">NEXUS Project</strong> | Management Dashboard
     </div>
-    <button class="btn-logout" onclick="location.href='index.html'">LOGOUT</button>
+    <div>
+        <span style="font-size: 0.85rem; color: var(--text-muted);">Developed by </span>
+        <a href="https://yourportfolio.com" target="_blank">Mateus d.S Cavalheiro</a>
+    </div>
 </header>
 
-<table>
-    <thead>
-    <tr>
-        <th>Asset ID</th>
-        <th>Device Name</th>
-        <th>System Status</th>
-        <th>Temperature</th>
-        <th>Current (A)</th>
-        <th>Last Update</th>
-    </tr>
-    </thead>
-    <tbody>
-    <tr>
-        <td>#001</td>
-        <td>Main Lathe CNC</td>
-        <td><span id="stat-text">Awaiting...</span></td>
-        <td><span id="temp-val">--</span> °C</td>
-        <td><span id="curr-val">--</span> A</td>
-        <td><span id="time-val">--</span></td>
-    </tr>
-    </tbody>
-</table>
+<div class="app-container">
+    <main class="main-content">
+
+        <div class="kpi-row">
+            <div class="kpi-box"><h3>Current Status</h3><span id="kpi-status">--</span></div>
+            <div class="kpi-box"><h3>Temperature</h3><span id="kpi-temp">-- °C</span></div>
+            <div class="kpi-box"><h3>Vibration</h3><span id="kpi-vib">-- mm/s</span></div>
+        </div>
+
+        <div class="card chart-line">
+            <h3>Telemetry Trends</h3>
+            <canvas id="trendChart"></canvas>
+        </div>
+
+        <div class="card chart-pie">
+            <h3>System Availability</h3>
+            <canvas id="statusChart"></canvas>
+        </div>
+
+        <div class="card alert-table">
+            <h3>Recent Critical Events</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Table placeholder...</p>
+        </div>
+
+    </main>
+
+    <aside class="sidebar">
+        <h3>Controls</h3>
+
+        <label for="motorSelect" style="font-size: 0.85rem; color: var(--text-muted);">Select Asset:</label>
+        <select id="motorSelect">
+            <option value="1">#001 - Main Lathe CNC</option>
+            <option value="2" disabled>#002 - Milling Machine (Offline)</option>
+        </select>
+
+        <button onclick="alert('Exporting to PDF...')">📄 Export to PDF</button>
+        <button onclick="alert('Exporting to CSV...')">📊 Export Data (CSV)</button>
+        <button onclick="alert('Toggling theme...')">🌓 Toggle Light/Dark Mode</button>
+
+        <button class="btn-logout" onclick="location.href='index.html'">LOGOUT</button>
+    </aside>
+</div>
 
 <script>
-    /**
-     * Updates the Table UI with the complete telemetry data.
-     */
-    function updateFullUI(status, temp, curr, timestamp) {
-        const statText = document.getElementById('stat-text');
-        const tempText = document.getElementById('temp-val');
-        const currText = document.getElementById('curr-val');
-        const timeText = document.getElementById('time-val');
+    // --- 1. Global Chart Variables ---
+    let trendChart, statusChart;
 
-        if (statText) {
-            statText.innerText = status;
-            // Color logic based on status
-            if (status === 'OPERATING') {
-                statText.style.color = '#2ecc71';
-            } else if (status === 'LOCKED_FAILURE') {
-                statText.style.color = '#ff5252';
-            } else {
-                statText.style.color = '#f1c40f';
-            }
-        }
+    // --- 2. Initialize Charts ---
+    function initCharts() {
+        // Trend Chart (Line)
+        const trendCtx = document.getElementById('trendChart').getContext('2d');
+        trendChart = new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: [], // Timestamps will go here
+                datasets: [
+                    { label: 'Temp (°C)', data: [], borderColor: '#ff5252', tension: 0.3 },
+                    { label: 'Current (A)', data: [], borderColor: '#2196f3', tension: 0.3 }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
 
-        // Updating telemetry values
-        if (tempText) tempText.innerText = temp !== undefined ? temp : "--";
-        if (currText) currText.innerText = curr !== undefined ? curr : "--";
-        if (timeText) timeText.innerText = timestamp !== undefined ? timestamp : "--";
+        // Status Chart (Doughnut/Pie)
+        const statusCtx = document.getElementById('statusChart').getContext('2d');
+        statusChart = new Chart(statusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['OPERATING', 'STOPPED', 'LOCKED_FAILURE'],
+                datasets: [{
+                    data: [0, 0, 0],
+                    backgroundColor: ['#2ecc71', '#f1c40f', '#ff5252']
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
     }
 
-    /**
-     * Fetches the latest record from the database.
-     */
-    async function loadLastStatusFromDatabase() {
+    // --- 3. Data Processing Function ---
+    async function refreshDashboard() {
         try {
             const response = await fetch('/api/history');
-            const historyData = await response.json();
+            const data = await response.json();
 
-            if (historyData.length > 0) {
-                const last = historyData[0];
-                // Using the keys defined in your TelemetryDAO.java
-                updateFullUI(last.status, last.temp, last.curr, last.time);
-            }
+            if (data.length === 0) return;
+
+            // Update KPI Cards with the latest record
+            const latest = data[0];
+            document.getElementById('kpi-status').innerText = latest.status;
+            document.getElementById('kpi-temp').innerText = latest.temp + " °C";
+            document.getElementById('kpi-vib').innerText = (latest.vib || "0.0") + " mm/s";
+
+            // Color logic for status KPI
+            const statusColor = latest.status === 'OPERATING' ? '#2ecc71' : (latest.status === 'LOCKED_FAILURE' ? '#ff5252' : '#f1c40f');
+            document.getElementById('kpi-status').style.color = statusColor;
+
+            // Prepare Chart Data (Inverting for chronological order)
+            const history = [...data].reverse();
+            const labels = history.map(item => item.time.split(' ')[1].substring(0, 5)); // HH:mm
+            const temps = history.map(item => item.temp);
+            const currents = history.map(item => item.curr);
+
+            // Update Line Chart
+            trendChart.data.labels = labels;
+            trendChart.data.datasets[0].data = temps;
+            trendChart.data.datasets[1].data = currents;
+            trendChart.update();
+
+            // Update Status Distribution (Logic to count occurrences)
+            const counts = { 'OPERATING': 0, 'STOPPED': 0, 'LOCKED_FAILURE': 0 };
+            data.forEach(item => counts[item.status]++);
+            statusChart.data.datasets[0].data = [counts['OPERATING'], counts['STOPPED'], counts['LOCKED_FAILURE']];
+            statusChart.update();
+
         } catch (error) {
-            console.error("[DB ERROR] Sync failed:", error);
+            console.error("[NEXUS SYNC ERROR]", error);
         }
     }
 
-    // --- WebSocket Connection ---
+    // --- 4. WebSocket for Real-time Updates ---
     const ws = new WebSocket("ws://" + window.location.host + "/ws");
-
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        // Instant update from live MQTT stream
-        // Note: ensuring we use the correct keys from your JSON object
-        updateFullUI(data.state, data.temp, data.current, new Date().toLocaleTimeString());
+    ws.onmessage = () => {
+        // Every time a new MQTT message arrives, we refresh the whole dashboard
+        refreshDashboard();
     };
 
-    // Load history when page opens
-    window.onload = loadLastStatusFromDatabase;
+    // --- 5. Start Everything ---
+    window.onload = () => {
+        initCharts();
+        refreshDashboard();
+    };
 </script>
 </body>
 </html>
