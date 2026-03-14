@@ -30,31 +30,82 @@
     <tr>
         <th>Asset ID</th>
         <th>Device Name</th>
-        <th>Industrial Zone</th>
         <th>System Status</th>
-        <th>Action</th>
+        <th>Temperature</th>
+        <th>Current (A)</th>
+        <th>Last Update</th>
     </tr>
     </thead>
     <tbody>
     <tr>
         <td>#001</td>
         <td>Main Lathe CNC</td>
-        <td>Sector A-1</td>
-        <td><span class="status-dot"></span> <span id="stat-text">Awaiting Telemetry...</span></td>
-        <td><button style="color:#666; background:none; border:none; cursor:not-allowed;">Decommission</button></td>
+        <td><span id="stat-text">Awaiting...</span></td>
+        <td><span id="temp-val">--</span> °C</td>
+        <td><span id="curr-val">--</span> A</td>
+        <td><span id="time-val">--</span></td>
     </tr>
     </tbody>
 </table>
 
 <script>
-    // Minimal logic to show connection on management screen too
+    /**
+     * Updates the Table UI with the complete telemetry data.
+     */
+    function updateFullUI(status, temp, curr, timestamp) {
+        const statText = document.getElementById('stat-text');
+        const tempText = document.getElementById('temp-val');
+        const currText = document.getElementById('curr-val');
+        const timeText = document.getElementById('time-val');
+
+        if (statText) {
+            statText.innerText = status;
+            // Color logic based on status
+            if (status === 'OPERATING') {
+                statText.style.color = '#2ecc71';
+            } else if (status === 'LOCKED_FAILURE') {
+                statText.style.color = '#ff5252';
+            } else {
+                statText.style.color = '#f1c40f';
+            }
+        }
+
+        // Updating telemetry values
+        if (tempText) tempText.innerText = temp !== undefined ? temp : "--";
+        if (currText) currText.innerText = curr !== undefined ? curr : "--";
+        if (timeText) timeText.innerText = timestamp !== undefined ? timestamp : "--";
+    }
+
+    /**
+     * Fetches the latest record from the database.
+     */
+    async function loadLastStatusFromDatabase() {
+        try {
+            const response = await fetch('/api/history');
+            const historyData = await response.json();
+
+            if (historyData.length > 0) {
+                const last = historyData[0];
+                // Using the keys defined in your TelemetryDAO.java
+                updateFullUI(last.status, last.temp, last.curr, last.time);
+            }
+        } catch (error) {
+            console.error("[DB ERROR] Sync failed:", error);
+        }
+    }
+
+    // --- WebSocket Connection ---
     const ws = new WebSocket("ws://" + window.location.host + "/ws");
+
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        const text = document.getElementById('stat-text');
-        text.innerText = data.state;
-        text.style.color = (data.state === 'OPERATING') ? '#2ecc71' : '#f1c40f';
+        // Instant update from live MQTT stream
+        // Note: ensuring we use the correct keys from your JSON object
+        updateFullUI(data.state, data.temp, data.current, new Date().toLocaleTimeString());
     };
+
+    // Load history when page opens
+    window.onload = loadLastStatusFromDatabase;
 </script>
 </body>
 </html>
