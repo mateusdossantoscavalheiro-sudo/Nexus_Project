@@ -2,6 +2,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.ResultSet;
+import java.util.ArrayList;
+import java.util.List;
+import org.json.JSONObject;
 
 public class TelemetryDAO {
 
@@ -24,5 +28,32 @@ public class TelemetryDAO {
         } catch (SQLException e) {
             System.err.println("[DATABASE] Error to connect or save: " + e.getMessage());
         }
+    }
+
+    public List<JSONObject> getHistory(int limit) {
+        List<JSONObject> history = new ArrayList<>();
+        String sql = "SELECT * FROM telemetry_log ORDER BY created_at DESC LIMIT ?";
+
+        try (Connection conn = DriverManager.getConnection(DatabaseConfig.URL, DatabaseConfig.USER, DatabaseConfig.PASS);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, limit);
+            ResultSet rs = pstmt.executeQuery();
+
+            while (rs.next()) {
+                JSONObject item = new JSONObject();
+                item.put("id", rs.getInt("asset_id"));
+                item.put("temp", rs.getDouble("temperature"));
+                item.put("humi", rs.getDouble("humidity"));
+                item.put("curr", rs.getDouble("current_amps"));
+                item.put("vib", rs.getDouble("vibration_x"));
+                item.put("status", rs.getString("system_status"));
+                item.put("time", rs.getTimestamp("created_at").toString());
+                history.add(item);
+            }
+        } catch (Exception e) {
+            System.err.println("[DB ERROR] Failed to get historic: " + e.getMessage());
+        }
+        return history;
     }
 }

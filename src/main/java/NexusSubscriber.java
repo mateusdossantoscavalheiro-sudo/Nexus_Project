@@ -36,6 +36,11 @@ public class NexusSubscriber {
             ws.onMessage(ctx -> handleWebCommand(ctx.message()));
         });
 
+        app.get("/api/history", ctx -> {
+            ctx.result(telemetryDAO.getHistory(50).toString());
+            ctx.contentType("application/json");
+        });
+
         setupMQTT();
 
         System.out.println("\n======================================");
