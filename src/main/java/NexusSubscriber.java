@@ -11,10 +11,11 @@ import java.util.Map;
  * Manages MQTT communication with ESP32 and WebSocket with Dashboard.
  */
 public class NexusSubscriber {
-
     private static final Map<Integer, MotorData> engineFleet = new ConcurrentHashMap<>();
     private static final Map<String, WsContext> sessions = new ConcurrentHashMap<>();
     private static IMqttClient mqttClient;
+
+    private static final TelemetryDAO telemetryDAO = new TelemetryDAO();
 
     public static void main(String[] args) {
         // Initialize Engine #1
@@ -63,6 +64,7 @@ public class NexusSubscriber {
                     if (engineFleet.containsKey(id)) {
                         MotorData motor = engineFleet.get(id);
                         motor.updateFromHardware(json);
+                        telemetryDAO.insertTelemetry(motor.id, motor.temp, motor.humi, motor.curr, motor.vib, motor.state);
                         broadcastToWeb(motor.toJson());
                     }
                 } catch (Exception e) {
