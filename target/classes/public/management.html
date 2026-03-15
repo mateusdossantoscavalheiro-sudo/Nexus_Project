@@ -4,7 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NEXUS - Management Dashboard</title>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
     <style>
         /* Base Dark Theme (Default) */
         :root {
@@ -16,10 +22,20 @@
             --border-color: #333333;
         }
 
+        /* Light Theme Overrides */
+        body.light-mode {
+            --bg-color: #f0f2f5;
+            --panel-bg: #ffffff;
+            --text-main: #1c1e21;
+            --text-muted: #606770;
+            --border-color: #ccd0d5;
+        }
+
         body {
             background: var(--bg-color); color: var(--text-main);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0; padding: 0; display: flex; height: 100vh; overflow: hidden;
+            transition: background 0.3s, color 0.3s;
         }
 
         /* Top Header */
@@ -42,7 +58,7 @@
         .main-content {
             flex-grow: 1; padding: 20px; overflow-y: auto;
             display: grid;
-            grid-template-columns: 2fr 1fr; /* Left side wider than right */
+            grid-template-columns: 2fr 1fr;
             grid-template-rows: auto auto 1fr;
             gap: 20px;
         }
@@ -50,19 +66,32 @@
         /* Dashboard Cards/Panels */
         .card {
             background: var(--panel-bg); border-radius: 8px; padding: 20px;
-            border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.15);
         }
 
         .card h3 { margin-top: 0; color: var(--text-muted); font-size: 0.9rem; text-transform: uppercase; }
 
-        /* specific grid placements */
         .kpi-row { grid-column: 1 / -1; display: flex; gap: 20px; }
-        .kpi-box { flex: 1; background: #222; padding: 15px; border-radius: 6px; text-align: center; }
+        .kpi-box {
+            flex: 1; background: var(--panel-bg); padding: 15px; border-radius: 6px;
+            text-align: center; border: 1px solid var(--border-color);
+        }
         .kpi-box span { display: block; font-size: 2rem; font-weight: bold; color: var(--accent-blue); }
 
+        /* Light Mode Specific Adjustments */
+        body.light-mode .kpi-box { background: #f8f9fa; }
+        body.light-mode select, body.light-mode button { background: #ffffff; color: #1c1e21; border-color: #ccd0d5; }
+        body.light-mode button:hover { background: #e4e6eb; }
+        body.light-mode .btn-logout:hover { background: #ff5252; color: white; }
+
         .chart-line { grid-column: 1 / 2; min-height: 300px; }
-        .chart-pie { grid-column: 2 / 3; min-height: 300px; }
+        .chart-pie { grid-column: 2 / 3; min-height: 300px; display: flex; flex-direction: column; }
+        .chart-pie-container { flex-grow: 1; position: relative; min-height: 200px; }
+
         .alert-table { grid-column: 1 / -1; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: left; }
+        th, td { padding: 10px; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
+        th { color: var(--text-muted); font-weight: normal; }
 
         /* Right Sidebar */
         .sidebar {
@@ -73,11 +102,14 @@
         /* Buttons & Inputs */
         select, button {
             width: 100%; padding: 10px; border-radius: 4px; border: 1px solid var(--border-color);
-            background: var(--bg-color); color: var(--text-main); cursor: pointer;
+            background: var(--bg-color); color: var(--text-main); cursor: pointer; transition: 0.2s;
         }
         button:hover { background: #333; }
         .btn-logout { background: transparent; border-color: #ff5252; color: #ff5252; margin-top: auto; }
         .btn-logout:hover { background: #ff5252; color: white; }
+
+        .alert-table { overflow-x: auto; }
+        table { min-width: 600px; }
 
     </style>
 </head>
@@ -89,7 +121,7 @@
     </div>
     <div>
         <span style="font-size: 0.85rem; color: var(--text-muted);">Developed by </span>
-        <a href="https://yourportfolio.com" target="_blank">Mateus d.S Cavalheiro</a>
+        <a href="https://mateusdossantoscavalheiro-sudo.github.io/Portifolio/" target="_blank">Mateus d.S Cavalheiro</a>
     </div>
 </header>
 
@@ -109,12 +141,26 @@
 
         <div class="card chart-pie">
             <h3>System Availability</h3>
-            <canvas id="statusChart"></canvas>
+            <div class="chart-pie-container">
+                <canvas id="statusChart"></canvas>
+            </div>
         </div>
 
         <div class="card alert-table">
-            <h3>Recent Critical Events</h3>
-            <p style="color: var(--text-muted); font-size: 0.9rem;">Table placeholder...</p>
+            <h3>Recent Critical Failures</h3> <table>
+            <thead>
+            <tr>
+                <th>Time</th>
+                <th>Asset ID</th>
+                <th>Status</th>
+                <th>Temp (°C)</th>
+                <th>Current (A)</th>
+                <th>Vibration (mm/s)</th>
+            </tr>
+            </thead>
+            <tbody id="critical-events-body">
+            </tbody>
+        </table>
         </div>
 
     </main>
@@ -128,102 +174,201 @@
             <option value="2" disabled>#002 - Milling Machine (Offline)</option>
         </select>
 
-        <button onclick="alert('Exporting to PDF...')">📄 Export to PDF</button>
-        <button onclick="alert('Exporting to CSV...')">📊 Export Data (CSV)</button>
-        <button onclick="alert('Toggling theme...')">🌓 Toggle Light/Dark Mode</button>
+        <button onclick="exportToPDF()">📄 Export to PDF</button>
+        <button onclick="exportToCSV()">📊 Export Data (CSV)</button>
+        <button onclick="toggleTheme()">🌓 Toggle Light/Dark Mode</button>
 
         <button class="btn-logout" onclick="location.href='index.html'">LOGOUT</button>
     </aside>
 </div>
 
 <script>
-    // --- 1. Global Chart Variables ---
+    // Register the DataLabels plugin for Chart.js
+    Chart.register(ChartDataLabels);
+
     let trendChart, statusChart;
 
-    // --- 2. Initialize Charts ---
+    // 1. Color mapping for status
+    const getStatusColor = (status) => {
+        if (status === 'OPERATING') return '#2ecc71'; // Green
+        if (status === 'MAINTENANCE') return '#2196f3'; // Blue
+        if (status === 'STOPPED' || status === 'LOCKED_FAILURE') return '#ff5252'; // Red
+        return '#f1c40f'; // Yellow fallback
+    };
+
     function initCharts() {
-        // Trend Chart (Line)
         const trendCtx = document.getElementById('trendChart').getContext('2d');
         trendChart = new Chart(trendCtx, {
             type: 'line',
             data: {
-                labels: [], // Timestamps will go here
+                labels: [],
                 datasets: [
-                    { label: 'Temp (°C)', data: [], borderColor: '#ff5252', tension: 0.3 },
-                    { label: 'Current (A)', data: [], borderColor: '#2196f3', tension: 0.3 }
+                    { label: 'Temp (°C)', data: [], borderColor: '#ff5252', tension: 0.3, fill: false },
+                    { label: 'Current (A)', data: [], borderColor: '#2196f3', tension: 0.3, fill: false }
                 ]
             },
-            options: { responsive: true, maintainAspectRatio: false }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { datalabels: { display: false } }, // No labels on lines
+                scales: {
+                    y: { beginAtZero: false, grid: { color: 'rgba(128, 128, 128, 0.2)' } },
+                    x: { grid: { color: 'rgba(128, 128, 128, 0.2)' } }
+                }
+            }
         });
 
-        // Status Chart (Doughnut/Pie)
         const statusCtx = document.getElementById('statusChart').getContext('2d');
         statusChart = new Chart(statusCtx, {
             type: 'doughnut',
             data: {
-                labels: ['OPERATING', 'STOPPED', 'LOCKED_FAILURE'],
+                labels: ['OPERATING', 'MAINTENANCE', 'STOPPED/FAILURE'],
                 datasets: [{
                     data: [0, 0, 0],
-                    backgroundColor: ['#2ecc71', '#f1c40f', '#ff5252']
+                    backgroundColor: ['#2ecc71', '#2196f3', '#ff5252'],
+                    borderWidth: 1,
+                    borderColor: 'var(--panel-bg)'
                 }]
             },
-            options: { responsive: true, maintainAspectRatio: false }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: 10 },
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12 } },
+                    // 3. DataLabels configuration for pie chart
+                    datalabels: {
+                        color: '#fff',
+                        font: { weight: 'bold', size: 14 },
+                        formatter: (value) => { return value > 0 ? value : ''; } // Hide zero values
+                    }
+                }
+            }
         });
     }
 
-    // --- 3. Data Processing Function ---
     async function refreshDashboard() {
         try {
             const response = await fetch('/api/history');
             const data = await response.json();
 
-            if (data.length === 0) return;
+            if (!data || data.length === 0) return;
 
-            // Update KPI Cards with the latest record
+            // KPI Update
             const latest = data[0];
-            document.getElementById('kpi-status').innerText = latest.status;
-            document.getElementById('kpi-temp').innerText = latest.temp + " °C";
-            document.getElementById('kpi-vib').innerText = (latest.vib || "0.0") + " mm/s";
+            const kpiStatus = document.getElementById('kpi-status');
+            kpiStatus.innerText = latest.status;
+            document.getElementById('kpi-temp').innerText = (latest.temp || 0).toFixed(1) + " °C";
+            document.getElementById('kpi-vib').innerText = (latest.vib || 0).toFixed(2) + " mm/s";
+            kpiStatus.style.color = getStatusColor(latest.status);
 
-            // Color logic for status KPI
-            const statusColor = latest.status === 'OPERATING' ? '#2ecc71' : (latest.status === 'LOCKED_FAILURE' ? '#ff5252' : '#f1c40f');
-            document.getElementById('kpi-status').style.color = statusColor;
-
-            // Prepare Chart Data (Inverting for chronological order)
+            // Line Chart Update
             const history = [...data].reverse();
-            const labels = history.map(item => item.time.split(' ')[1].substring(0, 5)); // HH:mm
-            const temps = history.map(item => item.temp);
-            const currents = history.map(item => item.curr);
+            trendChart.data.labels = history.map(item => item.time.includes(' ') ? item.time.split(' ')[1].substring(0, 8) : item.time);
+            trendChart.data.datasets[0].data = history.map(item => item.temp);
+            trendChart.data.datasets[1].data = history.map(item => item.curr);
+            trendChart.update('none');
 
-            // Update Line Chart
-            trendChart.data.labels = labels;
-            trendChart.data.datasets[0].data = temps;
-            trendChart.data.datasets[1].data = currents;
-            trendChart.update();
-
-            // Update Status Distribution (Logic to count occurrences)
-            const counts = { 'OPERATING': 0, 'STOPPED': 0, 'LOCKED_FAILURE': 0 };
-            data.forEach(item => counts[item.status]++);
-            statusChart.data.datasets[0].data = [counts['OPERATING'], counts['STOPPED'], counts['LOCKED_FAILURE']];
+            // --- NOVA LÓGICA DA PIZZA ---
+            // Vermelho representa apenas MOTOR PARADO (STOPPED)
+            let opCount = 0, maintCount = 0, stopCount = 0;
+            data.forEach(item => {
+                if (item.status === 'OPERATING') opCount++;
+                else if (item.status === 'MAINTENANCE') maintCount++;
+                else if (item.status === 'STOPPED') stopCount++; // Apenas parado
+            });
+            statusChart.data.datasets[0].data = [opCount, maintCount, stopCount];
             statusChart.update();
 
+            // --- NOVA LÓGICA DA TABELA DE FALHAS ---
+            const tableBody = document.getElementById('critical-events-body');
+            tableBody.innerHTML = '';
+
+            // Filtramos apenas as FALHAS (LOCKED_FAILURE)
+            const failures = data.filter(d => d.status === 'LOCKED_FAILURE').slice(0, 5);
+
+            if (failures.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">No critical failures detected</td></tr>';
+            } else {
+                failures.forEach(event => {
+                    const timeOnly = event.time.includes(' ') ? event.time.split(' ')[1].substring(0,8) : event.time;
+                    tableBody.innerHTML += `
+                        <tr>
+                            <td>${timeOnly}</td>
+                            <td>#00${event.id || 1}</td>
+                            <td style="color: #ff5252; font-weight: bold;">FAILURE</td>
+                            <td>${event.temp} °C</td>
+                            <td>${event.curr} A</td>
+                            <td>${event.vib || 0} mm/s</td>
+                        </tr>
+                    `;
+                });
+            }
+
         } catch (error) {
-            console.error("[NEXUS SYNC ERROR]", error);
+            console.error("[NEXUS ERROR]", error);
         }
     }
 
-    // --- 4. WebSocket for Real-time Updates ---
-    const ws = new WebSocket("ws://" + window.location.host + "/ws");
-    ws.onmessage = () => {
-        // Every time a new MQTT message arrives, we refresh the whole dashboard
-        refreshDashboard();
-    };
+    async function exportToCSV() {
+        try {
+            const response = await fetch('/api/history');
+            const data = await response.json();
+            let csvRows = ["\ufeffTimestamp,Asset_ID,Status,Temp_C,Current_A,Vib_mm/s"];
+            data.forEach(log => {
+                csvRows.push(`"${log.time}",${log.id || '1'},${log.status},${log.temp},${log.curr},${log.vib || 0}`);
+            });
+            const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.setAttribute("download", `NEXUS_Report_${new Date().getTime()}.csv`);
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        } catch (e) { alert("Export failed!"); }
+    }
 
-    // --- 5. Start Everything ---
-    window.onload = () => {
-        initCharts();
-        refreshDashboard();
-    };
+    async function exportToPDF() {
+        const { jsPDF } = window.jspdf;
+        const dashboard = document.querySelector('.main-content');
+        try {
+            const canvas = await html2canvas(dashboard, {
+                backgroundColor: document.body.classList.contains('light-mode') ? "#f0f2f5" : "#0f0f0f",
+                scale: 2, useCORS: true
+            });
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('l', 'mm', 'a4');
+            const imgProps = pdf.getImageProperties(imgData);
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+            pdf.setFontSize(18); pdf.setTextColor(33, 150, 243);
+            pdf.text("NEXUS - Asset Telemetry Report", 10, 15);
+            pdf.setFontSize(10); pdf.setTextColor(100, 100, 100);
+            pdf.text(`Generated on: ${new Date().toLocaleString()}`, 10, 22);
+            pdf.addImage(imgData, 'PNG', 5, 30, pdfWidth - 10, pdfHeight - 10);
+            pdf.save(`NEXUS_Report_${new Date().getTime()}.pdf`);
+        } catch (error) { alert("Error generating PDF."); }
+    }
+
+    // 5. Theme Toggle Logic
+    function toggleTheme() {
+        document.body.classList.toggle('light-mode');
+        // Update chart colors based on theme
+        const isLight = document.body.classList.contains('light-mode');
+        const gridColor = isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(128, 128, 128, 0.2)';
+
+        trendChart.options.scales.x.grid.color = gridColor;
+        trendChart.options.scales.y.grid.color = gridColor;
+        trendChart.update('none');
+
+        statusChart.data.datasets[0].borderColor = isLight ? '#ffffff' : '#1a1a1a';
+        statusChart.update('none');
+    }
+
+    const ws = new WebSocket("ws://" + window.location.host + "/ws");
+    ws.onmessage = () => refreshDashboard();
+
+    window.onload = () => { initCharts(); refreshDashboard(); };
 </script>
 </body>
 </html>
