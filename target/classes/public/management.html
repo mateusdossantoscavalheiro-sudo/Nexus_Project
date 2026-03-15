@@ -107,10 +107,7 @@
         button:hover { background: #333; }
         .btn-logout { background: transparent; border-color: #ff5252; color: #ff5252; margin-top: auto; }
         .btn-logout:hover { background: #ff5252; color: white; }
-
-        .alert-table { overflow-x: auto; }
-        table { min-width: 600px; }
-
+        
     </style>
 </head>
 <body>
@@ -222,7 +219,7 @@
         statusChart = new Chart(statusCtx, {
             type: 'doughnut',
             data: {
-                labels: ['OPERATING', 'MAINTENANCE', 'STOPPED/FAILURE'],
+                labels: ['OPERATING', 'MAINTENANCE', 'STOPPED'],
                 datasets: [{
                     data: [0, 0, 0],
                     backgroundColor: ['#2ecc71', '#2196f3', '#ff5252'],
@@ -254,59 +251,67 @@
 
             if (!data || data.length === 0) return;
 
-            // KPI Update
+            // 1. Update KPI Cards
             const latest = data[0];
             const kpiStatus = document.getElementById('kpi-status');
             kpiStatus.innerText = latest.status;
             document.getElementById('kpi-temp').innerText = (latest.temp || 0).toFixed(1) + " °C";
             document.getElementById('kpi-vib').innerText = (latest.vib || 0).toFixed(2) + " mm/s";
+
+            // Apply dynamic color to Status KPI
             kpiStatus.style.color = getStatusColor(latest.status);
 
-            // Line Chart Update
+            // 2. Update Telemetry Trends (Line Chart)
             const history = [...data].reverse();
             trendChart.data.labels = history.map(item => item.time.includes(' ') ? item.time.split(' ')[1].substring(0, 8) : item.time);
             trendChart.data.datasets[0].data = history.map(item => item.temp);
             trendChart.data.datasets[1].data = history.map(item => item.curr);
             trendChart.update('none');
 
-            // --- NOVA LÓGICA DA PIZZA ---
-            // Vermelho representa apenas MOTOR PARADO (STOPPED)
+            // 3. Update System Availability (Pie Chart)
+            // Logic: Red slice now represents ONLY "STOPPED"
             let opCount = 0, maintCount = 0, stopCount = 0;
             data.forEach(item => {
                 if (item.status === 'OPERATING') opCount++;
                 else if (item.status === 'MAINTENANCE') maintCount++;
-                else if (item.status === 'STOPPED') stopCount++; // Apenas parado
+                else if (item.status === 'STOPPED') stopCount++;
             });
             statusChart.data.datasets[0].data = [opCount, maintCount, stopCount];
             statusChart.update();
 
-            // --- NOVA LÓGICA DA TABELA DE FALHAS ---
+            // 4. Update Recent Critical Failures Table
             const tableBody = document.getElementById('critical-events-body');
-            tableBody.innerHTML = '';
+            tableBody.innerHTML = ''; // Clear previous entries
 
-            // Filtramos apenas as FALHAS (LOCKED_FAILURE)
-            const failures = data.filter(d => d.status === 'LOCKED_FAILURE').slice(0, 5);
+            // Filtering for LOCKED_FAILURE only
+            const failures = data.filter(d => d.status === 'LOCKED_FAILURE').reverse().slice(0, 5);
 
             if (failures.length === 0) {
                 tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">No critical failures detected</td></tr>';
             } else {
                 failures.forEach(event => {
                     const timeOnly = event.time.includes(' ') ? event.time.split(' ')[1].substring(0,8) : event.time;
+
+                    // Formatting technical parameters
+                    const temp = (event.temp || 0).toFixed(1);
+                    const current = (event.curr || 0).toFixed(2);
+                    const vibration = (event.vib || 0).toFixed(2);
+
                     tableBody.innerHTML += `
                         <tr>
                             <td>${timeOnly}</td>
                             <td>#00${event.id || 1}</td>
                             <td style="color: #ff5252; font-weight: bold;">FAILURE</td>
-                            <td>${event.temp} °C</td>
-                            <td>${event.curr} A</td>
-                            <td>${event.vib || 0} mm/s</td>
+                            <td>${temp} °C</td>
+                            <td>${current} A</td>
+                            <td>${vibration} mm/s</td>
                         </tr>
                     `;
                 });
             }
 
         } catch (error) {
-            console.error("[NEXUS ERROR]", error);
+            console.error("[NEXUS ERROR] Refresh failed:", error);
         }
     }
 
