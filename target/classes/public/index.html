@@ -4,14 +4,18 @@
     <meta charset="UTF-8">
     <title>NEXUS - Industrial Login</title>
     <style>
-        body { background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .login-card { background: #161616; padding: 40px; border-radius: 12px; border-top: 5px solid #2196f3; width: 320px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        h2 { letter-spacing: 2px; margin-bottom: 25px; color: #2196f3; }
-        input { width: 100%; padding: 12px; margin: 10px 0; background: #222; border: 1px solid #333; color: white; border-radius: 6px; box-sizing: border-box; outline: none; }
-        input:focus { border-color: #2196f3; }
-        button { width: 100%; padding: 12px; background: #2196f3; border: none; color: white; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.3s; margin-top: 10px; }
-        button:hover { background: #1976d2; }
-        .error { color: #ff5252; font-size: 0.85rem; margin-top: 15px; display: none; background: rgba(255,82,82,0.1); padding: 8px; border-radius: 4px; }
+        body { background: #0f0f0f; color: white; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-card {
+            background: #1a1a1a; padding: 40px; border-radius: 12px;
+            border-top: 5px solid #2196f3; width: 320px; text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); border-left: 1px solid #333; border-right: 1px solid #333; border-bottom: 1px solid #333;
+        }
+        h2 { letter-spacing: 3px; margin-bottom: 25px; color: #2196f3; font-weight: 800; }
+        input { width: 100%; padding: 12px; margin: 10px 0; background: #0f0f0f; border: 1px solid #333; color: white; border-radius: 6px; box-sizing: border-box; outline: none; transition: 0.3s; }
+        input:focus { border-color: #2196f3; box-shadow: 0 0 8px rgba(33, 150, 243, 0.3); }
+        button { width: 100%; padding: 12px; background: #2196f3; border: none; color: white; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.3s; margin-top: 10px; letter-spacing: 1px; }
+        button:hover { background: #1976d2; transform: translateY(-2px); }
+        .error { color: #ff5252; font-size: 0.85rem; margin-top: 15px; display: none; background: rgba(255,82,82,0.1); padding: 8px; border-radius: 4px; border: 1px solid rgba(255,82,82,0.3); }
     </style>
 </head>
 <body>
