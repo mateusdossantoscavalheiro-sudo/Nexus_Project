@@ -56,4 +56,31 @@ public class TelemetryDAO {
         }
         return history;
     }
+
+    public List<JSONObject> getCriticalFailures(int limit) {
+        List<JSONObject> failures = new ArrayList<>();
+        // SQL filtering only for LOCKED_FAILURE
+        String sql = "SELECT * FROM telemetry_log WHERE system_status = 'LOCKED_FAILURE' ORDER BY created_at DESC LIMIT ?";
+
+        try (Connection conn = DriverManager.getConnection(DatabaseConfig.URL, DatabaseConfig.USER, DatabaseConfig.PASS);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, limit);
+            ResultSet rs = pstmt.executeQuery();
+
+            while (rs.next()) {
+                JSONObject item = new JSONObject();
+                item.put("id", rs.getInt("asset_id"));
+                item.put("temp", rs.getDouble("temperature"));
+                item.put("curr", rs.getDouble("current_amps"));
+                item.put("vib", rs.getDouble("vibration_x"));
+                item.put("status", rs.getString("system_status"));
+                item.put("time", rs.getTimestamp("created_at").toString());
+                failures.add(item);
+            }
+        } catch (Exception e) {
+            System.err.println("[DB ERROR] Failed to fetch critical failures: " + e.getMessage());
+        }
+        return failures;
+    }
 }

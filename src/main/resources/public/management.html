@@ -20,6 +20,7 @@
             --text-muted: #888888;
             --accent-blue: #2196f3;
             --border-color: #333333;
+            --accent-yellow: #ffeb3b; /* New color for Vibration */
         }
 
         /* Light Theme Overrides */
@@ -31,11 +32,28 @@
             --border-color: #ccd0d5;
         }
 
+        /* Main Body Reset */
         body {
-            background: var(--bg-color); color: var(--text-main);
+            background: var(--bg-color);
+            color: var(--text-main);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0; padding: 0; display: flex; height: 100vh; overflow: hidden;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden; /* Prevent body from scrolling */
             transition: background 0.3s, color 0.3s;
+        }
+
+        /* GLOBAL SCROLLBAR REMOVAL */
+        /* This targets all scrollable areas including main-content */
+        * {
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* IE/Edge */
+        }
+
+        *::-webkit-scrollbar {
+            display: none; /* Chrome, Safari, Opera */
         }
 
         /* Top Header */
@@ -54,9 +72,11 @@
             display: flex; width: 100%; margin-top: 60px; height: calc(100vh - 60px);
         }
 
-        /* Main Dashboard Area (CSS Grid) */
+        /* Main Dashboard Area */
         .main-content {
-            flex-grow: 1; padding: 20px; overflow-y: auto;
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto; /* Allow scrolling here without showing the bar */
             display: grid;
             grid-template-columns: 2fr 1fr;
             grid-template-rows: auto auto 1fr;
@@ -78,22 +98,18 @@
         }
         .kpi-box span { display: block; font-size: 2rem; font-weight: bold; color: var(--accent-blue); }
 
-        /* Light Mode Specific Adjustments */
-        body.light-mode .kpi-box { background: #f8f9fa; }
-        body.light-mode select, body.light-mode button { background: #ffffff; color: #1c1e21; border-color: #ccd0d5; }
-        body.light-mode button:hover { background: #e4e6eb; }
-        body.light-mode .btn-logout:hover { background: #ff5252; color: white; }
-
-        .chart-line { grid-column: 1 / 2; min-height: 300px; }
-        .chart-pie { grid-column: 2 / 3; min-height: 300px; display: flex; flex-direction: column; }
+        /* Chart Sections */
+        .chart-line { grid-column: 1 / 2; min-height: 350px; }
+        .chart-pie { grid-column: 2 / 3; min-height: 350px; display: flex; flex-direction: column; }
         .chart-pie-container { flex-grow: 1; position: relative; min-height: 200px; }
 
-        .alert-table { grid-column: 1 / -1; }
+        /* Critical Failure Table */
+        .alert-table { grid-column: 1 / -1; margin-bottom: 20px; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: left; }
-        th, td { padding: 10px; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
+        th, td { padding: 12px; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
         th { color: var(--text-muted); font-weight: normal; }
 
-        /* Right Sidebar */
+        /* Sidebar Controls */
         .sidebar {
             width: 280px; background: var(--panel-bg); border-left: 1px solid var(--border-color);
             padding: 20px; display: flex; flex-direction: column; gap: 15px;
@@ -101,13 +117,19 @@
 
         /* Buttons & Inputs */
         select, button {
-            width: 100%; padding: 10px; border-radius: 4px; border: 1px solid var(--border-color);
+            width: 100%; padding: 12px; border-radius: 4px; border: 1px solid var(--border-color);
             background: var(--bg-color); color: var(--text-main); cursor: pointer; transition: 0.2s;
+            font-size: 0.9rem;
         }
         button:hover { background: #333; }
-        .btn-logout { background: transparent; border-color: #ff5252; color: #ff5252; margin-top: auto; }
+        .btn-logout { background: transparent; border-color: #ff5252; color: #ff5252; margin-top: auto; font-weight: bold; }
         .btn-logout:hover { background: #ff5252; color: white; }
-        
+
+        /* Light Mode Overrides for boxes */
+        body.light-mode .kpi-box { background: #f8f9fa; }
+        body.light-mode select, body.light-mode button { background: #ffffff; color: #1c1e21; border-color: #ccd0d5; }
+        body.light-mode button:hover { background: #e4e6eb; }
+        body.light-mode .btn-logout:hover { background: #ff5252; color: white; }
     </style>
 </head>
 <body>
@@ -201,7 +223,8 @@
                 labels: [],
                 datasets: [
                     { label: 'Temp (°C)', data: [], borderColor: '#ff5252', tension: 0.3, fill: false },
-                    { label: 'Current (A)', data: [], borderColor: '#2196f3', tension: 0.3, fill: false }
+                    { label: 'Current (A)', data: [], borderColor: '#2196f3', tension: 0.3, fill: false },
+                    { label: 'Vibration (mm/s)', data: [], borderColor: '#ffeb3b', tension: 0.4 }
                 ]
             },
             options: {
@@ -246,30 +269,34 @@
 
     async function refreshDashboard() {
         try {
-            const response = await fetch('/api/history');
-            const data = await response.json();
+            // 1. Fetch telemetry and failures in parallel for better performance
+            const [historyRes, failureRes] = await Promise.all([
+                fetch('/api/history'),
+                fetch('/api/failures')
+            ]);
+
+            const data = await historyRes.json();
+            const failures = await failureRes.json();
 
             if (!data || data.length === 0) return;
 
-            // 1. Update KPI Cards
+            // 2. Update KPI Cards (Latest real-time data)
             const latest = data[0];
             const kpiStatus = document.getElementById('kpi-status');
             kpiStatus.innerText = latest.status;
             document.getElementById('kpi-temp').innerText = (latest.temp || 0).toFixed(1) + " °C";
             document.getElementById('kpi-vib').innerText = (latest.vib || 0).toFixed(2) + " mm/s";
-
-            // Apply dynamic color to Status KPI
             kpiStatus.style.color = getStatusColor(latest.status);
 
-            // 2. Update Telemetry Trends (Line Chart)
+            // 3. Update Telemetry Trends (Line Chart)
             const history = [...data].reverse();
             trendChart.data.labels = history.map(item => item.time.includes(' ') ? item.time.split(' ')[1].substring(0, 8) : item.time);
             trendChart.data.datasets[0].data = history.map(item => item.temp);
             trendChart.data.datasets[1].data = history.map(item => item.curr);
+            trendChart.data.datasets[2].data = history.map(item => item.vib);
             trendChart.update('none');
 
-            // 3. Update System Availability (Pie Chart)
-            // Logic: Red slice now represents ONLY "STOPPED"
+            // 4. Update System Availability (Pie Chart)
             let opCount = 0, maintCount = 0, stopCount = 0;
             data.forEach(item => {
                 if (item.status === 'OPERATING') opCount++;
@@ -279,39 +306,35 @@
             statusChart.data.datasets[0].data = [opCount, maintCount, stopCount];
             statusChart.update();
 
-            // 4. Update Recent Critical Failures Table
+            // 5. Update Recent Critical Failures Table
             const tableBody = document.getElementById('critical-events-body');
-            tableBody.innerHTML = ''; // Clear previous entries
+            const selectedAsset = document.getElementById('motorSelect').value;
 
-            // Filtering for LOCKED_FAILURE only
-            const failures = data.filter(d => d.status === 'LOCKED_FAILURE').reverse().slice(0, 5);
+            const motorFailures = failures.filter(f => String(f.id) === String(selectedAsset));
 
-            if (failures.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">No critical failures detected</td></tr>';
+            tableBody.innerHTML = '';
+            if (motorFailures.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">No critical failures detected for Asset #00${selectedAsset}</td></tr>`;
             } else {
-                failures.forEach(event => {
-                    const timeOnly = event.time.includes(' ') ? event.time.split(' ')[1].substring(0,8) : event.time;
-
-                    // Formatting technical parameters
-                    const temp = (event.temp || 0).toFixed(1);
-                    const current = (event.curr || 0).toFixed(2);
-                    const vibration = (event.vib || 0).toFixed(2);
+                motorFailures.forEach(event => {
+                    // Now using the helper function to show Date + Time
+                    const fullTime = formatNexusDate(event.time);
 
                     tableBody.innerHTML += `
                         <tr>
-                            <td>${timeOnly}</td>
-                            <td>#00${event.id || 1}</td>
+                            <td style="white-space: nowrap; min-width: 150px;">${fullTime}</td>
+                            <td>#00${event.id}</td>
                             <td style="color: #ff5252; font-weight: bold;">FAILURE</td>
-                            <td>${temp} °C</td>
-                            <td>${current} A</td>
-                            <td>${vibration} mm/s</td>
+                            <td>${(event.temp || 0).toFixed(1)} °C</td>
+                            <td>${(event.curr || 0).toFixed(2)} A</td>
+                            <td>${(event.vib || 0).toFixed(2)} mm/s</td>
                         </tr>
                     `;
                 });
             }
 
         } catch (error) {
-            console.error("[NEXUS ERROR] Refresh failed:", error);
+            console.error("[NEXUS ERROR] Dashboard refresh failed:", error);
         }
     }
 
@@ -368,6 +391,19 @@
 
         statusChart.data.datasets[0].borderColor = isLight ? '#ffffff' : '#1a1a1a';
         statusChart.update('none');
+    }
+
+    // Helper to format PostgreSQL timestamp to "DD/MM HH:mm:ss"
+    function formatNexusDate(dateStr) {
+        const d = new Date(dateStr);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        const seconds = String(d.getSeconds()).padStart(2, '0');
+
+        return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
     }
 
     const ws = new WebSocket("ws://" + window.location.host + "/ws");

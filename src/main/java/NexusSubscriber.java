@@ -36,8 +36,15 @@ public class NexusSubscriber {
             ws.onMessage(ctx -> handleWebCommand(ctx.message()));
         });
 
+        // Route for general telemetry history (Charts and KPIs)
         app.get("/api/history", ctx -> {
             ctx.result(telemetryDAO.getHistory(50).toString());
+            ctx.contentType("application/json");
+        });
+
+        // Professional route for critical failures only (Maintenance Table)
+        app.get("/api/failures", ctx -> {
+            ctx.result(telemetryDAO.getCriticalFailures(5).toString());
             ctx.contentType("application/json");
         });
 
