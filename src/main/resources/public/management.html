@@ -356,26 +356,110 @@
     }
 
     async function exportToPDF() {
-        const { jsPDF } = window.jspdf;
-        const dashboard = document.querySelector('.main-content');
         try {
-            const canvas = await html2canvas(dashboard, {
-                backgroundColor: document.body.classList.contains('light-mode') ? "#f0f2f5" : "#0f0f0f",
-                scale: 2, useCORS: true
-            });
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('l', 'mm', 'a4');
-            const imgProps = pdf.getImageProperties(imgData);
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+            const margin = 15;
+            let currentY = 20;
 
-            pdf.setFontSize(18); pdf.setTextColor(33, 150, 243);
-            pdf.text("NEXUS - Asset Telemetry Report", 10, 15);
-            pdf.setFontSize(10); pdf.setTextColor(100, 100, 100);
-            pdf.text(`Generated on: ${new Date().toLocaleString()}`, 10, 22);
-            pdf.addImage(imgData, 'PNG', 5, 30, pdfWidth - 10, pdfHeight - 10);
-            pdf.save(`NEXUS_Report_${new Date().getTime()}.pdf`);
-        } catch (error) { alert("Error generating PDF."); }
+            const assetSelect = document.getElementById('motorSelect');
+            const assetName = assetSelect.options[assetSelect.selectedIndex].text;
+            const timestamp = new Date().toLocaleString('pt-BR');
+
+            // 1. Cabeçalho Principal
+            const drawHeader = () => {
+                doc.setFontSize(18);
+                doc.setTextColor(33, 150, 243);
+                doc.text("NEXUS - Asset Telemetry Report", margin, currentY);
+                currentY += 8;
+                doc.setFontSize(11);
+                doc.setTextColor(100);
+                doc.text(`Asset: ${assetName}`, margin, currentY);
+                currentY += 6;
+                doc.text(`Report Date: ${timestamp}`, margin, currentY);
+                currentY += 4;
+                doc.line(margin, currentY, pageWidth - margin, currentY);
+                currentY += 10;
+            };
+
+            drawHeader();
+
+            const captureSection = async (selector, title) => {
+                const element = document.querySelector(selector);
+                if (!element) return;
+
+                // Configuração da captura
+                const options = {
+                    backgroundColor: "#1a1a1a",
+                    scale: 2,
+                    useCORS: true
+                };
+
+                if (selector === '.chart-line' || selector === '.alert-table') {
+                    options.windowHeight = element.scrollHeight;
+                    options.height = element.scrollHeight;
+                }
+
+                const canvas = await html2canvas(element, options);
+                const imgData = canvas.toDataURL("image/png");
+                const imgProps = doc.getImageProperties(imgData);
+
+                let pdfWidth = pageWidth - (margin * 2);
+                if (selector === '.chart-pie') pdfWidth = pdfWidth * 0.6;
+                let pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+                // --- LÓGICA DE CORREÇÃO: Check de Bloco Inteiro ---
+                // Verifica se Título (6mm) + Imagem (pdfHeight) + Margem (10mm) cabem
+                const estimatedBlockHeight = pdfHeight + 16;
+
+                if (currentY + estimatedBlockHeight > pageHeight - 20) {
+                    doc.addPage();
+                    currentY = 20; // Reseta o Y na nova página
+                }
+
+                // Imprime o Título agora que sabemos que o bloco cabe
+                doc.setFontSize(12);
+                doc.setTextColor(40, 40, 40);
+                doc.setFont("helvetica", "bold");
+                doc.text(title, margin, currentY);
+                doc.setFont("helvetica", "normal");
+                currentY += 6;
+
+                let xPos = margin;
+                if (selector === '.chart-pie') xPos = (pageWidth - pdfWidth) / 2;
+
+                doc.addImage(imgData, 'PNG', xPos, currentY, pdfWidth, pdfHeight);
+                currentY += pdfHeight + 12;
+            };
+
+            // 2. Execução das Seções
+            await captureSection('.kpi-row', '1 - Current Status');
+            await captureSection('.chart-pie', '2 - System Availability History');
+            await captureSection('.chart-line', '3 - Telemetry Trends (Complete Log)');
+            await captureSection('.alert-table', '4 - Recent Critical Failures (Last Events)');
+
+            // 3. Numeração de Páginas (Rodapé)
+            const totalPages = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= totalPages; i++) {
+                doc.setPage(i);
+                doc.setFontSize(9);
+                doc.setTextColor(150, 150, 150);
+                doc.text(
+                    `NEXUS Core System - Confidential Industrial Data - Page ${i}/${totalPages}`,
+                    margin,
+                    pageHeight - 10
+                );
+            }
+
+            doc.save(`NEXUS_Report_${assetName.replace(/[^a-z0-9]/gi, '_')}.pdf`);
+            console.log("[NEXUS] PDF Fixed and Generated!");
+
+        } catch (error) {
+            console.error("[NEXUS ERROR]", error);
+            alert("Erro na exportação. Verifique o console.");
+        }
     }
 
     // 5. Theme Toggle Logic
