@@ -368,7 +368,7 @@
             const assetName = assetSelect.options[assetSelect.selectedIndex].text;
             const timestamp = new Date().toLocaleString('pt-BR');
 
-            // 1. Cabeçalho Principal
+            // 1. Principal Header
             const drawHeader = () => {
                 doc.setFontSize(18);
                 doc.setTextColor(33, 150, 243);
@@ -390,7 +390,7 @@
                 const element = document.querySelector(selector);
                 if (!element) return;
 
-                // Configuração da captura
+                // Configurating the print
                 const options = {
                     backgroundColor: "#1a1a1a",
                     scale: 2,
@@ -410,16 +410,16 @@
                 if (selector === '.chart-pie') pdfWidth = pdfWidth * 0.6;
                 let pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
-                // --- LÓGICA DE CORREÇÃO: Check de Bloco Inteiro ---
+                // --- Check the entyre block ---
                 // Verifica se Título (6mm) + Imagem (pdfHeight) + Margem (10mm) cabem
                 const estimatedBlockHeight = pdfHeight + 16;
 
                 if (currentY + estimatedBlockHeight > pageHeight - 20) {
                     doc.addPage();
-                    currentY = 20; // Reseta o Y na nova página
+                    currentY = 20; // Reset the Y in the new page
                 }
 
-                // Imprime o Título agora que sabemos que o bloco cabe
+                // Print the title
                 doc.setFontSize(12);
                 doc.setTextColor(40, 40, 40);
                 doc.setFont("helvetica", "bold");
@@ -434,13 +434,13 @@
                 currentY += pdfHeight + 12;
             };
 
-            // 2. Execução das Seções
+            // 2. Execution of the seccions
             await captureSection('.kpi-row', '1 - Current Status');
             await captureSection('.chart-pie', '2 - System Availability History');
             await captureSection('.chart-line', '3 - Telemetry Trends (Complete Log)');
             await captureSection('.alert-table', '4 - Recent Critical Failures (Last Events)');
 
-            // 3. Numeração de Páginas (Rodapé)
+            // 3. Number of pages
             const totalPages = doc.internal.getNumberOfPages();
             for (let i = 1; i <= totalPages; i++) {
                 doc.setPage(i);
@@ -458,7 +458,7 @@
 
         } catch (error) {
             console.error("[NEXUS ERROR]", error);
-            alert("Erro na exportação. Verifique o console.");
+            alert("Error to export. Verify the console.");
         }
     }
 
