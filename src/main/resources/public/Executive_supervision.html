@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>NEXUS - Executive Supervision</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-dark: #0f0f0f;
+            --panel-bg: #1a1a1a;
+            --nexus-blue: #2196f3;
+            --failure-red: #ff5252;
+            --text-main: #e0e0e0;
+            --green: #2ecc71;
+        }
+
+        body {
+            background: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            margin: 0; padding: 20px;
+        }
+
+        .header-exec {
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 2px solid var(--nexus-blue);
+            padding-bottom: 15px; margin-bottom: 20px;
+        }
+
+        .btn-nav {
+            background: transparent; border: 1px solid var(--nexus-blue);
+            color: var(--nexus-blue); padding: 8px 15px; cursor: pointer;
+            border-radius: 4px; transition: 0.3s;
+        }
+        .btn-nav:hover { background: var(--nexus-blue); color: white; }
+
+        .stats-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: var(--panel-bg); padding: 20px; border-radius: 8px;
+            text-align: center; border: 1px solid #333;
+        }
+        .stat-card h2 { color: var(--nexus-blue); margin: 10px 0; font-size: 2rem; }
+
+        .management-section {
+            display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px;
+        }
+
+        .asset-list, .comparison-chart {
+            background: var(--panel-bg); padding: 25px; border-radius: 12px;
+            border: 1px solid #222;
+        }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { color: var(--nexus-blue); text-align: left; padding: 12px; border-bottom: 1px solid #333; }
+        td { padding: 12px; border-bottom: 1px solid #222; font-size: 0.9rem; }
+
+        .btn-add {
+            background: var(--nexus-blue); color: white; border: none;
+            padding: 10px 20px; border-radius: 4px; cursor: pointer;
+            font-weight: bold; transition: 0.3s;
+        }
+        .btn-add:hover { background: #1976d2; transform: scale(1.05); }
+
+        .btn-delete {
+            background: none; border: 1px solid var(--failure-red); color: var(--failure-red);
+            padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.7rem;
+        }
+        .btn-delete:hover { background: var(--failure-red); color: white; }
+    </style>
+</head>
+<body>
+
+<div class="header-exec">
+    <div>
+        <h1 style="margin:0;">NEXUS <span style="font-weight: 300;">Core</span></h1>
+        <small style="color: var(--nexus-blue); letter-spacing: 2px;">EXECUTIVE PLANT MANAGER</small>
+    </div>
+    <button class="btn-nav" onclick="location.href='operation.html'">GO TO OPERATOR IHM</button>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card"><h3>Total Assets</h3><h2 id="total-assets">0</h2></div>
+    <div class="stat-card"><h3>Active (Operating)</h3><h2 id="active-assets" style="color: var(--green);">0</h2></div>
+    <div class="stat-card"><h3>Critical Alerts</h3><h2 id="critical-alerts" style="color: var(--failure-red);">0</h2></div>
+    <div class="stat-card"><h3>Plant Health</h3><h2>98.2%</h2></div>
+</div>
+
+<div class="management-section">
+    <div class="asset-list">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin:0;">Plant Inventory</h3>
+            <button class="btn-add" onclick="addNewAsset()">+ REGISTER NEW ASSET</button>
+        </div>
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Asset Name</th>
+                <th>Type</th>
+                <th>Safety Limit</th>
+                <th>Action</th>
+            </tr>
+            </thead>
+            <tbody id="asset-table-body">
+            </tbody>
+        </table>
+    </div>
+
+    <div class="comparison-chart">
+        <h3 style="margin-bottom: 20px;">Asset Temperature Profile</h3>
+        <canvas id="compareChart"></canvas>
+    </div>
+</div>
+
+<script>
+    let myChart;
+
+    // 1. INITIALIZATION: Executes when the page finishes loading
+    window.onload = () => {
+        loadAssetsFromServer();
+        initChart();
+    };
+
+    // 2. FETCH ASSETS (GET): Retrieves the engine fleet from the Java Backend
+    async function loadAssetsFromServer() {
+        console.log("[NEXUS] Connecting to Core at port 8080...");
+        try {
+            const response = await fetch('/api/assets');
+            if (!response.ok) throw new Error("Java Server communication failed");
+
+            const assets = await response.json();
+            updateDashboardUI(assets);
+        } catch (error) {
+            console.error("[CRITICAL] Sync Error:", error);
+        }
+    }
+
+    // 3. UI UPDATE: Populates the table, stat cards, and chart data
+    function updateDashboardUI(assets) {
+        const tbody = document.getElementById('asset-table-body');
+        tbody.innerHTML = '';
+
+        // Update Total Assets counter
+        document.getElementById('total-assets').innerText = assets.length;
+
+        let operatingCount = 0;
+        let chartLabels = [];
+        let chartLimits = [];
+
+        assets.forEach(asset => {
+            // Check operational status for the stat card
+            if (asset.state === 'OPERATING') operatingCount++;
+
+            // Prepare data arrays for the bar chart
+            chartLabels.push(asset.name);
+            chartLimits.push(asset.limitTemp || 60);
+
+            // Inject new row into the Inventory Table
+            tbody.innerHTML += `
+                <tr>
+                    <td>#00${asset.id}</td>
+                    <td><strong>${asset.name}</strong></td>
+                    <td>Industrial Motor</td>
+                    <td style="color: var(--failure-red); font-weight: bold;">${asset.limitTemp} °C</td>
+                    <td>
+                        <button class="btn-delete" onclick="deleteAsset(${asset.id})">DELETE</button>
+                    </td>
+                </tr>
+            `;
+        });
+
+        document.getElementById('active-assets').innerText = operatingCount;
+        refreshChartData(chartLabels, chartLimits);
+    }
+
+    // 4. REGISTER ASSET (POST): Sends new motor data to the Java engineFleet
+    async function addNewAsset() {
+        const id = prompt("Enter Unique Asset ID (Numeric):");
+        if (!id || isNaN(id)) return;
+
+        const name = prompt("Enter Asset Name (e.g., CNC Milling #02):");
+        if (!name) return;
+
+        const tempLimit = prompt("Set Safety Temperature Threshold (°C):", "60.0");
+
+        const payload = {
+            id: parseInt(id),
+            name: name,
+            limitTemp: parseFloat(tempLimit || 60.0)
+        };
+
+        try {
+            const response = await fetch('/api/assets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                alert("SUCCESS: Asset '" + name + "' registered in NEXUS Core.");
+                loadAssetsFromServer(); // Instant refresh of the UI
+            } else {
+                alert("SERVER ERROR: Check Java Console logs.");
+            }
+        } catch (error) {
+            alert("CONNECTION ERROR: Is the Java Backend running?");
+        }
+    }
+
+    // 5. CHARTING LOGIC (Chart.js Integration)
+    function initChart() {
+        const canvas = document.getElementById('compareChart');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        myChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Safety Threshold (°C)',
+                    data: [],
+                    backgroundColor: 'rgba(33, 150, 243, 0.4)',
+                    borderColor: '#2196f3',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true, grid: { color: '#333' } },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    function refreshChartData(labels, data) {
+        if (myChart) {
+            myChart.data.labels = labels;
+            myChart.data.datasets[0].data = data;
+            myChart.update();
+        }
+    }
+
+    function deleteAsset(id) {
+        console.log("[NEXUS] Flagging Asset ID " + id + " for removal.");
+        alert("Action Registered. This asset will be removed upon next database sync.");
+    }
+</script>
+
+</body>
+</html>

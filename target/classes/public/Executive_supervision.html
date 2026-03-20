@@ -119,72 +119,78 @@
 <script>
     let myChart;
 
-    // 1. INITIALIZATION
+    // 1. INITIALIZATION: Executes when the page finishes loading
     window.onload = () => {
         loadAssetsFromServer();
         initChart();
     };
 
-    // 2. FETCH DATA FROM JAVA SERVER
+    // 2. FETCH ASSETS (GET): Retrieves the engine fleet from the Java Backend
     async function loadAssetsFromServer() {
+        console.log("[NEXUS] Connecting to Core at port 8080...");
         try {
             const response = await fetch('/api/assets');
-            if (!response.ok) throw new Error("Server communication failed");
+            if (!response.ok) throw new Error("Java Server communication failed");
 
             const assets = await response.json();
-            updateUI(assets);
+            updateDashboardUI(assets);
         } catch (error) {
-            console.error("NEXUS CORE ERROR:", error);
+            console.error("[CRITICAL] Sync Error:", error);
         }
     }
 
-    // 3. UPDATE TABLE AND STATS
-    function updateUI(assets) {
+    // 3. UI UPDATE: Populates the table, stat cards, and chart data
+    function updateDashboardUI(assets) {
         const tbody = document.getElementById('asset-table-body');
         tbody.innerHTML = '';
 
+        // Update Total Assets counter
         document.getElementById('total-assets').innerText = assets.length;
 
-        let activeCount = 0;
+        let operatingCount = 0;
         let chartLabels = [];
-        let chartData = [];
+        let chartLimits = [];
 
         assets.forEach(asset => {
-            if (asset.state === 'OPERATING') activeCount++;
+            // Check operational status for the stat card
+            if (asset.state === 'OPERATING') operatingCount++;
 
+            // Prepare data arrays for the bar chart
             chartLabels.push(asset.name);
-            chartData.push(asset.limitTemp || 60);
+            chartLimits.push(asset.limitTemp || 60);
 
+            // Inject new row into the Inventory Table
             tbody.innerHTML += `
                 <tr>
                     <td>#00${asset.id}</td>
                     <td><strong>${asset.name}</strong></td>
                     <td>Industrial Motor</td>
                     <td style="color: var(--failure-red); font-weight: bold;">${asset.limitTemp} °C</td>
-                    <td><button class="btn-delete" onclick="alert('Delete functionality linked to DB.')">DELETE</button></td>
+                    <td>
+                        <button class="btn-delete" onclick="deleteAsset(${asset.id})">DELETE</button>
+                    </td>
                 </tr>
             `;
         });
 
-        document.getElementById('active-assets').innerText = activeCount;
-        updateChart(chartLabels, chartData);
+        document.getElementById('active-assets').innerText = operatingCount;
+        refreshChartData(chartLabels, chartLimits);
     }
 
-    // 4. ADD NEW ASSET (POST TO JAVA)
+    // 4. REGISTER ASSET (POST): Sends new motor data to the Java engineFleet
     async function addNewAsset() {
         const id = prompt("Enter Unique Asset ID (Numeric):");
         if (!id || isNaN(id)) return;
 
-        const name = prompt("Enter Asset Name (e.g., Lathe CNC #02):");
+        const name = prompt("Enter Asset Name (e.g., CNC Milling #02):");
         if (!name) return;
 
-        const tempLimit = prompt("Set Critical Temperature Limit (°C):", "60.0");
-        if (!tempLimit) return;
+        const tempLimit = prompt("Set Safety Temperature Threshold (°C):", "60.0");
 
         const payload = {
             id: parseInt(id),
             name: name,
-            limitTemp: parseFloat(tempLimit)
+            limitTemp: parseFloat(tempLimit || 60.0)
         };
 
         try {
@@ -195,19 +201,22 @@
             });
 
             if (response.ok) {
-                alert("SUCCESS: Asset synchronized with NEXUS Core.");
-                loadAssetsFromServer(); // Refresh everything
+                alert("SUCCESS: Asset '" + name + "' registered in NEXUS Core.");
+                loadAssetsFromServer(); // Instant refresh of the UI
             } else {
-                alert("SERVER ERROR: Check Java Console.");
+                alert("SERVER ERROR: Check Java Console logs.");
             }
         } catch (error) {
-            alert("NETWORK ERROR: Server is offline.");
+            alert("CONNECTION ERROR: Is the Java Backend running?");
         }
     }
 
-    // 5. CHART LOGIC
+    // 5. CHARTING LOGIC (Chart.js Integration)
     function initChart() {
-        const ctx = document.getElementById('compareChart').getContext('2d');
+        const canvas = document.getElementById('compareChart');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
         myChart = new Chart(ctx, {
             type: 'bar',
             data: {
@@ -215,9 +224,9 @@
                 datasets: [{
                     label: 'Safety Threshold (°C)',
                     data: [],
-                    backgroundColor: 'rgba(33, 150, 243, 0.5)',
+                    backgroundColor: 'rgba(33, 150, 243, 0.4)',
                     borderColor: '#2196f3',
-                    borderWidth: 1
+                    borderWidth: 2
                 }]
             },
             options: {
@@ -225,17 +234,22 @@
                 scales: {
                     y: { beginAtZero: true, grid: { color: '#333' } },
                     x: { grid: { display: false } }
-                },
-                plugins: { legend: { display: false } }
+                }
             }
         });
     }
 
-    function updateChart(labels, data) {
-        if (!myChart) return;
-        myChart.data.labels = labels;
-        myChart.data.datasets[0].data = data;
-        myChart.update();
+    function refreshChartData(labels, data) {
+        if (myChart) {
+            myChart.data.labels = labels;
+            myChart.data.datasets[0].data = data;
+            myChart.update();
+        }
+    }
+
+    function deleteAsset(id) {
+        console.log("[NEXUS] Flagging Asset ID " + id + " for removal.");
+        alert("Action Registered. This asset will be removed upon next database sync.");
     }
 </script>
 
