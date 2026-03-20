@@ -206,16 +206,108 @@
     Chart.register(ChartDataLabels);
 
     let trendChart, statusChart;
+    let selectedMotorId = null;
 
-    // 1. Color mapping for status
-    const getStatusColor = (status) => {
-        if (status === 'OPERATING') return '#2ecc71'; // Green
-        if (status === 'MAINTENANCE') return '#2196f3'; // Blue
-        if (status === 'STOPPED' || status === 'LOCKED_FAILURE') return '#ff5252'; // Red
-        return '#f1c40f'; // Yellow fallback
+    /**
+     * 1. INITIALIZATION
+     * Connects to the backend, builds charts, and starts the update loop.
+     */
+    window.onload = async () => {
+        initCharts();
+        await syncAssetList(); // Load real assets from Java
+        refreshDashboard();
+
+        // Auto-refresh every 5 seconds to keep data current
+        setInterval(refreshDashboard, 5000);
     };
 
+    /**
+     * 2. ASSET SYNCING
+     * Populates the dropdown menu with real motors from the Nexus Core.
+     */
+    async function syncAssetList() {
+        try {
+            const response = await fetch('/api/assets');
+            const assets = await response.json();
+            const selectEl = document.getElementById('motorSelect');
+
+            selectEl.innerHTML = '';
+            assets.forEach(asset => {
+                let opt = document.createElement('option');
+                opt.value = asset.id;
+                opt.innerHTML = `Asset #00${asset.id}: ${asset.name}`;
+                selectEl.appendChild(opt);
+            });
+
+            if (assets.length > 0) {
+                selectedMotorId = assets[0].id;
+            }
+        } catch (e) {
+            console.error("Critical: Failed to sync asset list with Java backend.");
+        }
+    }
+
+    /**
+     * 3. DASHBOARD REFRESH LOGIC
+     * Fetches all telemetry and filters it based on the selected asset ID.
+     */
+    async function refreshDashboard() {
+        if (!selectedMotorId) return;
+
+        try {
+            // Fetch telemetry and failure history in parallel
+            const [historyRes, failureRes] = await Promise.all([
+                fetch('/api/history'),
+                fetch('/api/failures')
+            ]);
+
+            const allLogs = await historyRes.json();
+            const allFailures = await failureRes.json();
+
+            // Filter data specifically for the selected motor
+            const motorLogs = allLogs.filter(log => String(log.id) === String(selectedMotorId));
+            const motorFailures = allFailures.filter(f => String(f.id) === String(selectedMotorId));
+
+            if (motorLogs.length === 0) return;
+
+            // Update Top KPI Cards
+            const latest = motorLogs[0];
+            document.getElementById('kpi-status').innerText = latest.status;
+            document.getElementById('kpi-temp').innerText = (latest.temp || 0).toFixed(1) + " °C";
+            document.getElementById('kpi-vib').innerText = (latest.vib || 0).toFixed(2) + " mm/s";
+            document.getElementById('kpi-status').style.color = getStatusColor(latest.status);
+
+            // Update Line Chart (Trends)
+            const history = [...motorLogs].reverse();
+            trendChart.data.labels = history.map(item => parseNexusTime(item.time));
+            trendChart.data.datasets[0].data = history.map(item => item.temp);
+            trendChart.data.datasets[1].data = history.map(item => item.curr);
+            trendChart.data.datasets[2].data = history.map(item => item.vib);
+            trendChart.update('none');
+
+            // Update Doughnut Chart (Availability Distribution)
+            let opCount = 0, maintCount = 0, stopCount = 0;
+            motorLogs.forEach(item => {
+                if (item.status === 'OPERATING') opCount++;
+                else if (item.status === 'MAINTENANCE') maintCount++;
+                else if (item.status === 'STOPPED' || item.status === 'LOCKED_FAILURE') stopCount++;
+            });
+            statusChart.data.datasets[0].data = [opCount, maintCount, stopCount];
+            statusChart.update();
+
+            // Update Failure Table
+            updateFailureTable(motorFailures);
+
+        } catch (error) {
+            console.error("[NEXUS ERROR] Refresh failed:", error);
+        }
+    }
+
+    /**
+     * 4. CHART CONFIGURATION
+     */
     function initCharts() {
+        // Line Chart: Telemetry Trends
         const trendCtx = document.getElementById('trendChart').getContext('2d');
         trendChart = new Chart(trendCtx, {
             type: 'line',
@@ -230,14 +322,15 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { datalabels: { display: false } }, // No labels on lines
+                plugins: { datalabels: { display: false } },
                 scales: {
-                    y: { beginAtZero: false, grid: { color: 'rgba(128, 128, 128, 0.2)' } },
+                    y: { grid: { color: 'rgba(128, 128, 128, 0.2)' } },
                     x: { grid: { color: 'rgba(128, 128, 128, 0.2)' } }
                 }
             }
         });
 
+        // Doughnut Chart: Asset Status Distribution
         const statusCtx = document.getElementById('statusChart').getContext('2d');
         statusChart = new Chart(statusCtx, {
             type: 'doughnut',
@@ -247,253 +340,146 @@
                     data: [0, 0, 0],
                     backgroundColor: ['#2ecc71', '#2196f3', '#ff5252'],
                     borderWidth: 1,
-                    borderColor: 'var(--panel-bg)'
+                    borderColor: '#1a1a1a'
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                layout: { padding: 10 },
                 plugins: {
-                    legend: { position: 'bottom', labels: { boxWidth: 12 } },
-                    // 3. DataLabels configuration for pie chart
+                    legend: { position: 'bottom', labels: { color: '#e0e0e0' } },
                     datalabels: {
                         color: '#fff',
-                        font: { weight: 'bold', size: 14 },
-                        formatter: (value) => { return value > 0 ? value : ''; } // Hide zero values
+                        font: { weight: 'bold' },
+                        formatter: (value) => value > 0 ? value : ''
                     }
                 }
             }
         });
     }
 
-    async function refreshDashboard() {
-        try {
-            // 1. Fetch telemetry and failures in parallel for better performance
-            const [historyRes, failureRes] = await Promise.all([
-                fetch('/api/history'),
-                fetch('/api/failures')
-            ]);
-
-            const data = await historyRes.json();
-            const failures = await failureRes.json();
-
-            if (!data || data.length === 0) return;
-
-            // 2. Update KPI Cards (Latest real-time data)
-            const latest = data[0];
-            const kpiStatus = document.getElementById('kpi-status');
-            kpiStatus.innerText = latest.status;
-            document.getElementById('kpi-temp').innerText = (latest.temp || 0).toFixed(1) + " °C";
-            document.getElementById('kpi-vib').innerText = (latest.vib || 0).toFixed(2) + " mm/s";
-            kpiStatus.style.color = getStatusColor(latest.status);
-
-            // 3. Update Telemetry Trends (Line Chart)
-            const history = [...data].reverse();
-            trendChart.data.labels = history.map(item => item.time.includes(' ') ? item.time.split(' ')[1].substring(0, 8) : item.time);
-            trendChart.data.datasets[0].data = history.map(item => item.temp);
-            trendChart.data.datasets[1].data = history.map(item => item.curr);
-            trendChart.data.datasets[2].data = history.map(item => item.vib);
-            trendChart.update('none');
-
-            // 4. Update System Availability (Pie Chart)
-            let opCount = 0, maintCount = 0, stopCount = 0;
-            data.forEach(item => {
-                if (item.status === 'OPERATING') opCount++;
-                else if (item.status === 'MAINTENANCE') maintCount++;
-                else if (item.status === 'STOPPED') stopCount++;
-            });
-            statusChart.data.datasets[0].data = [opCount, maintCount, stopCount];
-            statusChart.update();
-
-            // 5. Update Recent Critical Failures Table
-            const tableBody = document.getElementById('critical-events-body');
-            const selectedAsset = document.getElementById('motorSelect').value;
-
-            const motorFailures = failures.filter(f => String(f.id) === String(selectedAsset));
-
-            tableBody.innerHTML = '';
-            if (motorFailures.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">No critical failures detected for Asset #00${selectedAsset}</td></tr>`;
-            } else {
-                motorFailures.forEach(event => {
-                    // Now using the helper function to show Date + Time
-                    const fullTime = formatNexusDate(event.time);
-
-                    tableBody.innerHTML += `
-                        <tr>
-                            <td style="white-space: nowrap; min-width: 150px;">${fullTime}</td>
-                            <td>#00${event.id}</td>
-                            <td style="color: #ff5252; font-weight: bold;">FAILURE</td>
-                            <td>${(event.temp || 0).toFixed(1)} °C</td>
-                            <td>${(event.curr || 0).toFixed(2)} A</td>
-                            <td>${(event.vib || 0).toFixed(2)} mm/s</td>
-                        </tr>
-                    `;
-                });
-            }
-
-        } catch (error) {
-            console.error("[NEXUS ERROR] Dashboard refresh failed:", error);
-        }
-    }
-
+    /**
+     * 5. DATA EXPORT & UTILITIES
+     */
     async function exportToCSV() {
         try {
             const response = await fetch('/api/history');
             const data = await response.json();
+            // Filter CSV data for current asset
+            const filtered = data.filter(log => String(log.id) === String(selectedMotorId));
+
             let csvRows = ["\ufeffTimestamp,Asset_ID,Status,Temp_C,Current_A,Vib_mm/s"];
-            data.forEach(log => {
-                csvRows.push(`"${log.time}",${log.id || '1'},${log.status},${log.temp},${log.curr},${log.vib || 0}`);
+            filtered.forEach(log => {
+                csvRows.push(`"${log.time}",${log.id},${log.status},${log.temp},${log.curr},${log.vib || 0}`);
             });
+
             const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
-            link.setAttribute("download", `NEXUS_Report_${new Date().getTime()}.csv`);
+            link.setAttribute("download", `NEXUS_Asset_${selectedMotorId}_Report.csv`);
             document.body.appendChild(link); link.click(); document.body.removeChild(link);
-        } catch (e) { alert("Export failed!"); }
+        } catch (e) { alert("CSV Export failed."); }
     }
 
     async function exportToPDF() {
-        try {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('p', 'mm', 'a4');
-            const pageWidth = doc.internal.pageSize.getWidth();
-            const pageHeight = doc.internal.pageSize.getHeight();
-            const margin = 15;
-            let currentY = 20;
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'mm', 'a4');
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 15;
+        let currentY = 20;
 
-            const assetSelect = document.getElementById('motorSelect');
-            const assetName = assetSelect.options[assetSelect.selectedIndex].text;
-            const timestamp = new Date().toLocaleString('pt-BR');
+        const assetSelect = document.getElementById('motorSelect');
+        const assetName = assetSelect.options[assetSelect.selectedIndex].text;
 
-            // 1. Principal Header
-            const drawHeader = () => {
-                doc.setFontSize(18);
-                doc.setTextColor(33, 150, 243);
-                doc.text("NEXUS - Asset Telemetry Report", margin, currentY);
-                currentY += 8;
-                doc.setFontSize(11);
-                doc.setTextColor(100);
-                doc.text(`Asset: ${assetName}`, margin, currentY);
-                currentY += 6;
-                doc.text(`Report Date: ${timestamp}`, margin, currentY);
-                currentY += 4;
-                doc.line(margin, currentY, pageWidth - margin, currentY);
-                currentY += 10;
-            };
+        // Header logic
+        doc.setFontSize(18);
+        doc.setTextColor(33, 150, 243);
+        doc.text("NEXUS - Asset Telemetry Report", margin, currentY);
+        currentY += 10;
+        doc.setFontSize(11);
+        doc.setTextColor(100);
+        doc.text(`Asset Context: ${assetName}`, margin, currentY);
+        currentY += 15;
 
-            drawHeader();
+        // Capture sections using your original html2canvas logic
+        const sections = [
+            { id: '.kpi-row', title: '1 - Current Status' },
+            { id: '.chart-pie', title: '2 - Availability Distribution' },
+            { id: '.chart-line', title: '3 - Telemetry Trends' },
+            { id: '.alert-table', title: '4 - Failure History' }
+        ];
 
-            const captureSection = async (selector, title) => {
-                const element = document.querySelector(selector);
-                if (!element) return;
-
-                // Configurating the print
-                const options = {
-                    backgroundColor: "#1a1a1a",
-                    scale: 2,
-                    useCORS: true
-                };
-
-                if (selector === '.chart-line' || selector === '.alert-table') {
-                    options.windowHeight = element.scrollHeight;
-                    options.height = element.scrollHeight;
-                }
-
-                const canvas = await html2canvas(element, options);
+        for (const section of sections) {
+            const element = document.querySelector(section.id);
+            if (element) {
+                const canvas = await html2canvas(element, { backgroundColor: "#1a1a1a", scale: 2 });
                 const imgData = canvas.toDataURL("image/png");
-                const imgProps = doc.getImageProperties(imgData);
+                const pdfWidth = pageWidth - (margin * 2);
+                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
-                let pdfWidth = pageWidth - (margin * 2);
-                if (selector === '.chart-pie') pdfWidth = pdfWidth * 0.6;
-                let pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-
-                // --- Check the entyre block ---
-                // Verifica se Título (6mm) + Imagem (pdfHeight) + Margem (10mm) cabem
-                const estimatedBlockHeight = pdfHeight + 16;
-
-                if (currentY + estimatedBlockHeight > pageHeight - 20) {
+                if (currentY + pdfHeight > 270) {
                     doc.addPage();
-                    currentY = 20; // Reset the Y in the new page
+                    currentY = 20;
                 }
 
-                // Print the title
                 doc.setFontSize(12);
-                doc.setTextColor(40, 40, 40);
-                doc.setFont("helvetica", "bold");
-                doc.text(title, margin, currentY);
-                doc.setFont("helvetica", "normal");
-                currentY += 6;
-
-                let xPos = margin;
-                if (selector === '.chart-pie') xPos = (pageWidth - pdfWidth) / 2;
-
-                doc.addImage(imgData, 'PNG', xPos, currentY, pdfWidth, pdfHeight);
-                currentY += pdfHeight + 12;
-            };
-
-            // 2. Execution of the seccions
-            await captureSection('.kpi-row', '1 - Current Status');
-            await captureSection('.chart-pie', '2 - System Availability History');
-            await captureSection('.chart-line', '3 - Telemetry Trends (Complete Log)');
-            await captureSection('.alert-table', '4 - Recent Critical Failures (Last Events)');
-
-            // 3. Number of pages
-            const totalPages = doc.internal.getNumberOfPages();
-            for (let i = 1; i <= totalPages; i++) {
-                doc.setPage(i);
-                doc.setFontSize(9);
-                doc.setTextColor(150, 150, 150);
-                doc.text(
-                    `NEXUS Core System - Confidential Industrial Data - Page ${i}/${totalPages}`,
-                    margin,
-                    pageHeight - 10
-                );
+                doc.text(section.title, margin, currentY);
+                currentY += 5;
+                doc.addImage(imgData, 'PNG', margin, currentY, pdfWidth, pdfHeight);
+                currentY += pdfHeight + 15;
             }
-
-            doc.save(`NEXUS_Report_${assetName.replace(/[^a-z0-9]/gi, '_')}.pdf`);
-            console.log("[NEXUS] PDF Fixed and Generated!");
-
-        } catch (error) {
-            console.error("[NEXUS ERROR]", error);
-            alert("Error to export. Verify the console.");
         }
+        doc.save(`NEXUS_Asset_${selectedMotorId}_Report.pdf`);
     }
 
-    // 5. Theme Toggle Logic
+    function updateSelectedMotor() {
+        selectedMotorId = document.getElementById('motorSelect').value;
+        refreshDashboard();
+    }
+
     function toggleTheme() {
         document.body.classList.toggle('light-mode');
-        // Update chart colors based on theme
         const isLight = document.body.classList.contains('light-mode');
         const gridColor = isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(128, 128, 128, 0.2)';
 
         trendChart.options.scales.x.grid.color = gridColor;
         trendChart.options.scales.y.grid.color = gridColor;
         trendChart.update('none');
-
-        statusChart.data.datasets[0].borderColor = isLight ? '#ffffff' : '#1a1a1a';
-        statusChart.update('none');
     }
 
-    // Helper to format PostgreSQL timestamp to "DD/MM HH:mm:ss"
-    function formatNexusDate(dateStr) {
-        const d = new Date(dateStr);
-        const day = String(d.getDate()).padStart(2, '0');
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const year = d.getFullYear();
-        const hours = String(d.getHours()).padStart(2, '0');
-        const minutes = String(d.getMinutes()).padStart(2, '0');
-        const seconds = String(d.getSeconds()).padStart(2, '0');
-
-        return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+    function getStatusColor(status) {
+        if (status === 'OPERATING') return '#2ecc71';
+        if (status === 'MAINTENANCE') return '#2196f3';
+        return '#ff5252';
     }
 
-    const ws = new WebSocket("ws://" + window.location.host + "/ws");
-    ws.onmessage = () => refreshDashboard();
+    function parseNexusTime(dateStr) {
+        return dateStr.includes(' ') ? dateStr.split(' ')[1].substring(0, 8) : dateStr;
+    }
 
-    window.onload = () => { initCharts(); refreshDashboard(); };
+    function updateFailureTable(failures) {
+        const tableBody = document.getElementById('critical-events-body');
+        tableBody.innerHTML = '';
+
+        if (failures.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">No critical failures detected.</td></tr>`;
+            return;
+        }
+
+        failures.forEach(event => {
+            tableBody.innerHTML += `
+                <tr>
+                    <td>${event.time}</td>
+                    <td>#00${event.id}</td>
+                    <td style="color: #ff5252; font-weight: bold;">FAILURE</td>
+                    <td>${event.temp.toFixed(1)} °C</td>
+                    <td>${event.curr.toFixed(2)} A</td>
+                    <td>${(event.vib || 0).toFixed(2)} mm/s</td>
+                </tr>
+            `;
+        });
+    }
 </script>
 </body>
 </html>
