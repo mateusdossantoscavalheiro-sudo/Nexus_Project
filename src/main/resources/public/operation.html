@@ -137,6 +137,10 @@
      */
     window.onload = async () => {
         await syncAssetList();
+
+        // Add event listener to the dropdown to trigger context switch
+        document.getElementById('asset-select').addEventListener('change', updateSelectedAsset);
+
         connectWebSocket();
     };
 
@@ -151,7 +155,7 @@
 
             const assets = await response.json();
             const selectEl = document.getElementById('asset-select');
-            selectEl.innerHTML = ''; // Clear hardcoded assets
+            selectEl.innerHTML = '';
 
             assets.forEach(asset => {
                 let opt = document.createElement('option');
@@ -163,26 +167,38 @@
             // Auto-select the first asset if none is active
             if (assets.length > 0 && currentAssetId === null) {
                 currentAssetId = assets[0].id;
+                // Notify backend of the initial selected ID
+                setTimeout(() => notifyBackendContextSwitch(), 1000);
             }
         } catch (error) {
-            console.error("NEXUS CONFIG ERROR:", error);
+            console.error("[NEXUS] CONFIG ERROR:", error);
             document.getElementById('state-display').innerText = "CONFIG ERROR: NO API ACCESS";
         }
     }
 
     /**
      * CONTEXT SWITCHING
-     * Clears UI data when a new machine is selected to prevent "ghost" readings.
+     * Clears UI data and notifies the Java/ESP32 layer of the new target ID.
      */
     function updateSelectedAsset() {
         currentAssetId = document.getElementById('asset-select').value;
-        console.log("Switching operator context to Asset:", currentAssetId);
+        console.log("[NEXUS] Switching operator context to Asset ID:", currentAssetId);
 
-        // Reset display values
+        // Reset display values to prevent "ghost" readings from the previous asset
         document.getElementById('val-temp').innerText = "--";
         document.getElementById('val-curr').innerText = "--";
         document.getElementById('val-humi').innerText = "--";
         document.getElementById('val-vib').innerText = "--";
+
+        // Dispatch command to change the simulated hardware ID
+        notifyBackendContextSwitch();
+    }
+
+    function notifyBackendContextSwitch() {
+        if (ws && ws.readyState === WebSocket.OPEN && currentAssetId) {
+            ws.send(`SWITCH_ID:${currentAssetId}`);
+            console.log("[NEXUS] Instructed hardware to simulate Asset ID:", currentAssetId);
+        }
     }
 
     /**
@@ -205,38 +221,41 @@
             document.getElementById('val-humi').innerText = data.humi.toFixed(0);
             document.getElementById('val-vib').innerText = data.vib.toFixed(2);
 
-            // 2. Update Status Banner (Text + CSS Class for styling/animation)
+            // 2. Update Status Banner
             const banner = document.getElementById('state-display');
             banner.innerText = "STATUS: " + data.state;
             banner.className = "status-banner " + data.state;
 
-            // 3. Safety Lock Management
+            // 3. Safety Lock Management (NEW LOGIC)
             const assetSelect = document.getElementById('asset-select');
             const startBtn = document.getElementById('btn-start');
 
             if (data.state === 'LOCKED_FAILURE') {
                 assetSelect.disabled = true; // Block switching during critical failure
                 startBtn.disabled = true;    // Prevent starting a broken machine
+            } else if (data.state === 'OPERATING') {
+                assetSelect.disabled = true; // NEW: Cannot switch machines while running
+                startBtn.disabled = true;    // Already running
             } else {
+                // State is STOPPED or IDLE
                 assetSelect.disabled = false;
                 startBtn.disabled = false;
             }
 
-            // 4. Dynamic Visual Alerting (Card Borders)
+            // 4. Dynamic Visual Alerting
             updateCardBorder('temp', data.temp, 45, data.limitTemp || 60);
             updateCardBorder('curr', data.curr, 10, 14);
             updateCardBorder('vib', Math.abs(data.vib), 6, 10);
         };
 
         ws.onclose = () => {
-            console.warn("WebSocket link lost. Reconnecting...");
+            console.warn("[NEXUS] WebSocket link lost. Reconnecting...");
             setTimeout(connectWebSocket, 2000);
         };
     }
 
     /**
      * CARD HIGHLIGHTING
-     * Changes border color to Yellow (Warning) or Red (Critical) based on values.
      */
     function updateCardBorder(id, value, warning, critical) {
         const card = document.getElementById('card-' + id);
@@ -247,13 +266,12 @@
 
     /**
      * COMMAND TRANSMISSION
-     * Sends the operational instruction using the standard Nexus Protocol "ID:CMD".
      */
     function sendCommand(cmd) {
         if (ws && ws.readyState === WebSocket.OPEN && currentAssetId) {
             const payload = `${currentAssetId}:${cmd}`;
             ws.send(payload);
-            console.log("Nexus Command Sent:", payload);
+            console.log("[NEXUS] Command Sent:", payload);
         } else {
             alert("Error: No connection to Command Server.");
         }
