@@ -1,8 +1,8 @@
 <div align="center">
   
-  # ＮＥＸＵＳ ＰＲＯＪＥＣＴ // ＥＳＰ３２
+  # ＮＥＸＵＳ ＰＲＯＪＥＣＴ
   
   **`[ INDUSTRIAL MONITORING SYSTEM ]`**
 
 > **By Mateus Cavalheiro**  
-> 🔗 [Meu Portifólio](https://mateusdossantoscavalheiro-sudo.github.io/Portifolio/)
+> 🔗 [My Porfolio](https://mateusdossantoscavalheiro-sudo.github.io/Portifolio/)
