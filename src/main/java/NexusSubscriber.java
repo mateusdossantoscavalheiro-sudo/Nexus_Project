@@ -66,20 +66,6 @@ public class NexusSubscriber {
             }
         });
 
-        app.post("/api/assets", ctx -> {
-            JSONObject body = new JSONObject(ctx.body());
-            int id = body.getInt("id");
-            String name = body.getString("name");
-            double tempLimit = body.optDouble("limitTemp", 60.0);
-
-            MotorData newMotor = new MotorData(id, name);
-            newMotor.limitTemp = tempLimit;
-
-            engineFleet.put(id, newMotor);
-            System.out.println("[CORE] New Asset Registered: " + name + " (ID: " + id + ")");
-            ctx.status(201).result("{\"status\":\"Created\"}");
-        });
-
         // --- WEBSOCKET ROUTES ---
         app.ws("/ws", ws -> {
             ws.onConnect(ctx -> {
@@ -223,6 +209,7 @@ public class NexusSubscriber {
                 broadcastToWeb(this.toJson());
             } catch (Exception e) { e.printStackTrace(); }
         }
+
 
         public String toJson() {
             return new JSONObject()

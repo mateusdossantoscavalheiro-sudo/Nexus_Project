@@ -280,7 +280,7 @@
 
             // Update Line Chart
             const history = [...motorLogs].reverse();
-            trendChart.data.labels = history.map(item => parseNexusTime(item.created_at));
+            trendChart.data.labels = history.map(item => parseNexusTime(item.created_at)); // created_at é o nome no banco
             trendChart.data.datasets[0].data = history.map(item => item.temperature);
             trendChart.data.datasets[1].data = history.map(item => item.current_amps);
             trendChart.data.datasets[2].data = history.map(item => item.vibration_x);
@@ -483,12 +483,12 @@
         failures.forEach(event => {
             tableBody.innerHTML += `
                 <tr>
-                    <td>${event.time}</td>
-                    <td>#00${event.id}</td>
+                    <td>${parseNexusTime(event.created_at)}</td>
+                    <td>#00${event.asset_id}</td>
                     <td style="color: #ff5252; font-weight: bold;">FAILURE</td>
-                    <td>${event.temp.toFixed(1)} °C</td>
-                    <td>${event.curr.toFixed(2)} A</td>
-                    <td>${(event.vib || 0).toFixed(2)} mm/s</td>
+                    <td>${(event.temperature || 0).toFixed(1)} °C</td>
+                    <td>${(event.current_amps || 0).toFixed(2)} A</td>
+                    <td>${(event.vibration_x || 0).toFixed(2)} mm/s</td>
                 </tr>
             `;
         });

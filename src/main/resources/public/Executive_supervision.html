@@ -117,6 +117,7 @@
 </div>
 
 <script>
+
     let myChart;
 
     // 1. INITIALIZATION: Executes when the page finishes loading
@@ -127,15 +128,52 @@
 
     // 2. FETCH ASSETS (GET): Retrieves the engine fleet from the Java Backend
     async function loadAssetsFromServer() {
-        console.log("[NEXUS] Connecting to Core at port 8080...");
         try {
-            const response = await fetch('/api/assets');
-            if (!response.ok) throw new Error("Java Server communication failed");
+            // Buscamos os Assets (motores) e o Histórico (para o gráfico de tempo)
+            const [assetsRes, historyRes] = await Promise.all([
+                fetch('/api/assets'),
+                fetch('/api/history')
+            ]);
 
-            const assets = await response.json();
-            updateDashboardUI(assets);
+            const assets = await assetsRes.json();
+            const history = await historyRes.json();
+
+            const tableBody = document.getElementById('asset-table-body');
+            tableBody.innerHTML = '';
+
+            let labels = [];
+            let operatingTimes = [];
+
+            assets.forEach(asset => {
+                // Adiciona na tabela mostrando os 3 limites
+                tableBody.innerHTML += `
+                    <tr>
+                        <td>#00${asset.id}</td>
+                        <td>${asset.name}</td>
+                        <td>${asset.limitTemp}°C | ${asset.limitCurr}A | ${asset.limitVib}mm/s</td>
+                        <td><span class="status-indicator"></span>ACTIVE</td>
+                        <td><button class="btn-nav" style="border-color: #ff5252; color: #ff5252;" onclick="deleteAsset(${asset.id})">Remove</button></td>
+                    </tr>
+                `;
+
+                // Lógica do Gráfico: Contar quantos registros no histórico estão como "OPERATING" para este motor
+                labels.push(asset.name);
+                const uptimeCount = history.filter(log =>
+                    String(log.asset_id) === String(asset.id) && log.system_status === 'OPERATING'
+                ).length;
+
+                operatingTimes.push(uptimeCount);
+            });
+
+            // Atualiza o gráfico com os nomes dos motores e o tempo de operação
+            refreshChartData(labels, operatingTimes);
+
+            if(document.getElementById('total-assets')) {
+                document.getElementById('total-assets').innerText = assets.length;
+            }
+
         } catch (error) {
-            console.error("[CRITICAL] Sync Error:", error);
+            console.error("FETCH ERROR:", error);
         }
     }
 
@@ -165,7 +203,7 @@
                     <td>#00${asset.id}</td>
                     <td><strong>${asset.name}</strong></td>
                     <td>Industrial Motor</td>
-                    <td style="color: var(--failure-red); font-weight: bold;">${asset.limitTemp} °C</td>
+                    <td style="color: var(--failure-red); font-weight: bold;"><td>${asset.limitTemp}°C | ${asset.limitCurr}A | ${asset.limitVib}mm/s</td>
                     <td>
                         <button class="btn-delete" onclick="deleteAsset(${asset.id})">DELETE</button>
                     </td>
@@ -186,11 +224,15 @@
         if (!name) return;
 
         const tempLimit = prompt("Set Safety Temperature Threshold (°C):", "60.0");
+        const currLimit = prompt("Set Safety Current Threshold (A):", "15.0");
+        const vibLimit = prompt("Set Safety Vibration Threshold (mm/s):", "10.0");
 
         const payload = {
             id: parseInt(id),
             name: name,
-            limitTemp: parseFloat(tempLimit || 60.0)
+            limitTemp: parseFloat(tempLimit || 60.0),
+            limitCurr: parseFloat(currLimit || 15.0),
+            limitVib: parseFloat(vibLimit || 10.0)
         };
 
         try {
@@ -222,18 +264,25 @@
             data: {
                 labels: [],
                 datasets: [{
-                    label: 'Safety Threshold (°C)',
+                    label: 'Uptime (Operating Cycles)', // Título atualizado
                     data: [],
-                    backgroundColor: 'rgba(33, 150, 243, 0.4)',
-                    borderColor: '#2196f3',
+                    backgroundColor: 'rgba(46, 204, 113, 0.4)', // Verde para indicar operação/saúde
+                    borderColor: '#2ecc71',
                     borderWidth: 2
                 }]
             },
             options: {
                 responsive: true,
                 scales: {
-                    y: { beginAtZero: true, grid: { color: '#333' } },
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Total Cycles in Operating State', color: '#888' },
+                        grid: { color: '#333' }
+                    },
                     x: { grid: { display: false } }
+                },
+                plugins: {
+                    legend: { labels: { color: '#e0e0e0' } }
                 }
             }
         });
