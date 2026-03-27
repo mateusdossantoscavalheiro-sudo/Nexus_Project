@@ -188,7 +188,7 @@
         <h3>Controls</h3>
 
         <label for="motorSelect" style="font-size: 0.85rem; color: var(--text-muted);">Select Asset:</label>
-        <select id="motorSelect">
+        <select id="motorSelect" onchange="updateSelectedMotor()">
             <option value="1">#001 - Main Lathe CNC</option>
             <option value="2" disabled>#002 - Milling Machine (Offline)</option>
         </select>
@@ -255,7 +255,6 @@
         if (!selectedMotorId) return;
 
         try {
-            // Fetch telemetry and failure history in parallel
             const [historyRes, failureRes] = await Promise.all([
                 fetch('/api/history'),
                 fetch('/api/failures')
@@ -264,38 +263,39 @@
             const allLogs = await historyRes.json();
             const allFailures = await failureRes.json();
 
-            // Filter data specifically for the selected motor
-            const motorLogs = allLogs.filter(log => String(log.id) === String(selectedMotorId));
-            const motorFailures = allFailures.filter(f => String(f.id) === String(selectedMotorId));
+            const motorLogs = allLogs.filter(log => String(log.asset_id) === String(selectedMotorId));
+            const motorFailures = allFailures.filter(f => String(f.asset_id) === String(selectedMotorId));
 
-            if (motorLogs.length === 0) return;
+            if (motorLogs.length === 0) {
+                resetKPIs();
+                return;
+            }
 
             // Update Top KPI Cards
             const latest = motorLogs[0];
-            document.getElementById('kpi-status').innerText = latest.status;
-            document.getElementById('kpi-temp').innerText = (latest.temp || 0).toFixed(1) + " °C";
-            document.getElementById('kpi-vib').innerText = (latest.vib || 0).toFixed(2) + " mm/s";
-            document.getElementById('kpi-status').style.color = getStatusColor(latest.status);
+            document.getElementById('kpi-status').innerText = latest.system_status;
+            document.getElementById('kpi-temp').innerText = (latest.temperature || 0).toFixed(1) + " °C";
+            document.getElementById('kpi-vib').innerText = (latest.vibration_x || 0).toFixed(2) + " mm/s";
+            document.getElementById('kpi-status').style.color = getStatusColor(latest.system_status);
 
-            // Update Line Chart (Trends)
+            // Update Line Chart
             const history = [...motorLogs].reverse();
-            trendChart.data.labels = history.map(item => parseNexusTime(item.time));
-            trendChart.data.datasets[0].data = history.map(item => item.temp);
-            trendChart.data.datasets[1].data = history.map(item => item.curr);
-            trendChart.data.datasets[2].data = history.map(item => item.vib);
+            trendChart.data.labels = history.map(item => parseNexusTime(item.created_at));
+            trendChart.data.datasets[0].data = history.map(item => item.temperature);
+            trendChart.data.datasets[1].data = history.map(item => item.current_amps);
+            trendChart.data.datasets[2].data = history.map(item => item.vibration_x);
             trendChart.update('none');
 
-            // Update Doughnut Chart (Availability Distribution)
+            // Update Doughnut Chart
             let opCount = 0, maintCount = 0, stopCount = 0;
             motorLogs.forEach(item => {
-                if (item.status === 'OPERATING') opCount++;
-                else if (item.status === 'MAINTENANCE') maintCount++;
-                else if (item.status === 'STOPPED' || item.status === 'LOCKED_FAILURE') stopCount++;
+                if (item.system_status === 'OPERATING') opCount++;
+                else if (item.system_status === 'MAINTENANCE') maintCount++;
+                else stopCount++;
             });
             statusChart.data.datasets[0].data = [opCount, maintCount, stopCount];
             statusChart.update();
 
-            // Update Failure Table
             updateFailureTable(motorFailures);
 
         } catch (error) {
@@ -454,8 +454,21 @@
         return '#ff5252';
     }
 
+    function updateSelectedMotor() {
+        selectedMotorId = document.getElementById('motorSelect').value;
+        console.log("Selected Asset ID:", selectedMotorId);
+        refreshDashboard();
+    }
+
+    function resetKPIs() {
+        document.getElementById('kpi-status').innerText = "--";
+        document.getElementById('kpi-temp').innerText = "-- °C";
+        document.getElementById('kpi-vib').innerText = "-- mm/s";
+    }
+
     function parseNexusTime(dateStr) {
-        return dateStr.includes(' ') ? dateStr.split(' ')[1].substring(0, 8) : dateStr;
+        if(!dateStr) return "";
+        return dateStr.includes('T') ? dateStr.split('T')[1].substring(0, 8) : dateStr.substring(11, 19);
     }
 
     function updateFailureTable(failures) {

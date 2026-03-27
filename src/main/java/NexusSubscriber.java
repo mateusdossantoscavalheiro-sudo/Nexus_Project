@@ -33,17 +33,37 @@ public class NexusSubscriber {
 
         // --- REST API ROUTES ---
 
+        app.get("/api/history", ctx -> {
+            ctx.json(telemetryDAO.getHistory(1000));
+        });
+
+        app.get("/api/failures", ctx -> {
+            ctx.json(telemetryDAO.getCriticalFailures(100));
+        });
+
         app.get("/api/assets", ctx -> {
-            JSONArray list = new JSONArray();
-            engineFleet.values().forEach(motor -> {
-                JSONObject obj = new JSONObject();
-                obj.put("id", motor.id);
-                obj.put("name", motor.name);
-                obj.put("limitTemp", motor.limitTemp);
-                obj.put("state", motor.state);
-                list.put(obj);
-            });
-            ctx.result(list.toString()).contentType("application/json");
+            ctx.json(engineFleet.values().stream().map(MotorData::toJson).toList());
+        });
+
+        app.post("/api/assets", ctx -> {
+            try {
+                JSONObject body = new JSONObject(ctx.body());
+                int id = body.getInt("id");
+                String name = body.getString("name");
+                double limitTemp = body.getDouble("limitTemp");
+                double limitCurr = body.getDouble("limitCurr");
+                double limitVib = body.getDouble("limitVib");
+
+                MotorData newMotor = new MotorData(id, name);
+                newMotor.limitTemp = limitTemp;
+                newMotor.limitCurr = limitCurr;
+                newMotor.limitVib = limitVib;
+
+                engineFleet.put(id, newMotor);
+                ctx.status(201).result("Asset Registered");
+            } catch (Exception e) {
+                ctx.status(400).result("Invalid Data: " + e.getMessage());
+            }
         });
 
         app.post("/api/assets", ctx -> {
@@ -210,6 +230,8 @@ public class NexusSubscriber {
                     .put("temp", temp).put("humi", humi)
                     .put("curr", curr).put("vib", vib)
                     .put("limitTemp", limitTemp)
+                    .put("limitCurr", limitCurr)
+                    .put("limitVib", limitVib)
                     .put("state", state).toString();
         }
     }
