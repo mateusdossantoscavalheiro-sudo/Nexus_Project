@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS - Management Dashboard</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        /* Base Dark Theme (Default) */
+        :root {
+            --bg-color: #0f0f0f;
+            --panel-bg: #1a1a1a;
+            --text-main: #e0e0e0;
+            --text-muted: #888888;
+            --accent-blue: #2196f3;
+            --border-color: #333333;
+            --accent-yellow: #ffeb3b; /* New color for Vibration */
+        }
+
+        /* Light Theme Overrides */
+        body.light-mode {
+            --bg-color: #f0f2f5;
+            --panel-bg: #ffffff;
+            --text-main: #1c1e21;
+            --text-muted: #606770;
+            --border-color: #ccd0d5;
+        }
+
+        /* Main Body Reset */
+        body {
+            background: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden; /* Prevent body from scrolling */
+            transition: background 0.3s, color 0.3s;
+        }
+
+        /* GLOBAL SCROLLBAR REMOVAL */
+        /* This targets all scrollable areas including main-content */
+        * {
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* IE/Edge */
+        }
+
+        *::-webkit-scrollbar {
+            display: none; /* Chrome, Safari, Opera */
+        }
+
+        /* Top Header */
+        header {
+            position: absolute; top: 0; left: 0; right: 0; height: 60px;
+            background: var(--panel-bg); border-bottom: 1px solid var(--border-color);
+            display: flex; justify-content: space-between; align-items: center; padding: 0 20px;
+            z-index: 10;
+        }
+
+        header a { color: var(--accent-blue); text-decoration: none; font-weight: bold; }
+        header a:hover { text-decoration: underline; }
+
+        /* Layout Container */
+        .app-container {
+            display: flex; width: 100%; margin-top: 60px; height: calc(100vh - 60px);
+        }
+
+        /* Main Dashboard Area */
+        .main-content {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto; /* Allow scrolling here without showing the bar */
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            grid-template-rows: auto auto 1fr;
+            gap: 20px;
+        }
+
+        /* Dashboard Cards/Panels */
+        .card {
+            background: var(--panel-bg); border-radius: 8px; padding: 20px;
+            border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+        }
+
+        .card h3 { margin-top: 0; color: var(--text-muted); font-size: 0.9rem; text-transform: uppercase; }
+
+        .kpi-row { grid-column: 1 / -1; display: flex; gap: 20px; }
+        .kpi-box {
+            flex: 1; background: var(--panel-bg); padding: 15px; border-radius: 6px;
+            text-align: center; border: 1px solid var(--border-color);
+        }
+        .kpi-box span { display: block; font-size: 2rem; font-weight: bold; color: var(--accent-blue); }
+
+        /* Chart Sections */
+        .chart-line { grid-column: 1 / 2; min-height: 350px; }
+        .chart-pie { grid-column: 2 / 3; min-height: 350px; display: flex; flex-direction: column; }
+        .chart-pie-container { flex-grow: 1; position: relative; min-height: 200px; }
+
+        /* Critical Failure Table */
+        .alert-table { grid-column: 1 / -1; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: left; }
+        th, td { padding: 12px; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
+        th { color: var(--text-muted); font-weight: normal; }
+
+        /* Sidebar Controls */
+        .sidebar {
+            width: 280px; background: var(--panel-bg); border-left: 1px solid var(--border-color);
+            padding: 20px; display: flex; flex-direction: column; gap: 15px;
+        }
+
+        /* Buttons & Inputs */
+        select, button {
+            width: 100%; padding: 12px; border-radius: 4px; border: 1px solid var(--border-color);
+            background: var(--bg-color); color: var(--text-main); cursor: pointer; transition: 0.2s;
+            font-size: 0.9rem;
+        }
+        button:hover { background: #333; }
+        .btn-logout { background: transparent; border-color: #ff5252; color: #ff5252; margin-top: auto; font-weight: bold; }
+        .btn-logout:hover { background: #ff5252; color: white; }
+
+        /* Light Mode Overrides for boxes */
+        body.light-mode .kpi-box { background: #f8f9fa; }
+        body.light-mode select, body.light-mode button { background: #ffffff; color: #1c1e21; border-color: #ccd0d5; }
+        body.light-mode button:hover { background: #e4e6eb; }
+        body.light-mode .btn-logout:hover { background: #ff5252; color: white; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div>
+        <strong style="font-size: 1.2rem;">NEXUS Project</strong> | Management Dashboard
+    </div>
+    <div>
+        <span style="font-size: 0.85rem; color: var(--text-muted);">Developed by </span>
+        <a href="https://mateusdossantoscavalheiro-sudo.github.io/Portifolio/" target="_blank">Mateus d.S Cavalheiro</a>
+    </div>
+</header>
+
+<div class="app-container">
+    <main class="main-content">
+
+        <div class="kpi-row">
+            <div class="kpi-box"><h3>Current Status</h3><span id="kpi-status">--</span></div>
+            <div class="kpi-box"><h3>Temperature</h3><span id="kpi-temp">-- °C</span></div>
+            <div class="kpi-box"><h3>Vibration</h3><span id="kpi-vib">-- mm/s</span></div>
+        </div>
+
+        <div class="card chart-line">
+            <h3>Telemetry Trends</h3>
+            <canvas id="trendChart"></canvas>
+        </div>
+
+        <div class="card chart-pie">
+            <h3>System Availability</h3>
+            <div class="chart-pie-container">
+                <canvas id="statusChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card alert-table">
+            <h3>Recent Critical Failures</h3> <table>
+            <thead>
+            <tr>
+                <th>Time</th>
+                <th>Asset ID</th>
+                <th>Status</th>
+                <th>Temp (°C)</th>
+                <th>Current (A)</th>
+                <th>Vibration (mm/s)</th>
+            </tr>
+            </thead>
+            <tbody id="critical-events-body">
+            </tbody>
+        </table>
+        </div>
+
+    </main>
+
+    <aside class="sidebar">
+        <h3>Controls</h3>
+
+        <label for="motorSelect" style="font-size: 0.85rem; color: var(--text-muted);">Select Asset:</label>
+        <select id="motorSelect" onchange="updateSelectedMotor()">
+            <option value="1">#001 - Main Lathe CNC</option>
+            <option value="2" disabled>#002 - Milling Machine (Offline)</option>
+        </select>
+
+        <button onclick="exportToPDF()">📄 Export to PDF</button>
+        <button onclick="exportToCSV()">📊 Export Data (CSV)</button>
+        <button onclick="toggleTheme()">🌓 Toggle Light/Dark Mode</button>
+
+        <button class="btn-logout" onclick="location.href='index.html'">LOGOUT</button>
+    </aside>
+</div>
+
+<script>
+    // Register the DataLabels plugin for Chart.js
+    Chart.register(ChartDataLabels);
+
+    let trendChart, statusChart;
+    let selectedMotorId = null;
+
+    /**
+     * 1. INITIALIZATION
+     * Connects to the backend, builds charts, and starts the update loop.
+     */
+    window.onload = async () => {
+        initCharts();
+        await syncAssetList(); // Load real assets from Java
+        refreshDashboard();
+
+        // Auto-refresh every 5 seconds to keep data current
+        setInterval(refreshDashboard, 5000);
+    };
+
+    /**
+     * 2. ASSET SYNCING
+     * Populates the dropdown menu with real motors from the Nexus Core.
+     */
+    async function syncAssetList() {
+        try {
+            const response = await fetch('/api/assets');
+            const assets = await response.json();
+            const selectEl = document.getElementById('motorSelect');
+
+            selectEl.innerHTML = '';
+            assets.forEach(asset => {
+                let opt = document.createElement('option');
+                opt.value = asset.id;
+                opt.innerHTML = `Asset #00${asset.id}: ${asset.name}`;
+                selectEl.appendChild(opt);
+            });
+
+            if (assets.length > 0) {
+                selectedMotorId = assets[0].id;
+            }
+        } catch (e) {
+            console.error("Critical: Failed to sync asset list with Java backend.");
+        }
+    }
+
+    /**
+     * 3. DASHBOARD REFRESH LOGIC
+     * Fetches all telemetry and filters it based on the selected asset ID.
+     */
+    async function refreshDashboard() {
+        if (!selectedMotorId) return;
+
+        try {
+            const [historyRes, failureRes] = await Promise.all([
+                fetch('/api/history'),
+                fetch('/api/failures')
+            ]);
+
+            const allLogs = await historyRes.json();
+            const allFailures = await failureRes.json();
+
+            const motorLogs = allLogs.filter(log => String(log.asset_id) === String(selectedMotorId));
+            const motorFailures = allFailures.filter(f => String(f.asset_id) === String(selectedMotorId));
+
+            if (motorLogs.length === 0) {
+                resetKPIs();
+                return;
+            }
+
+            // Update Top KPI Cards
+            const latest = motorLogs[0];
+            document.getElementById('kpi-status').innerText = latest.system_status;
+            document.getElementById('kpi-temp').innerText = (latest.temperature || 0).toFixed(1) + " °C";
+            document.getElementById('kpi-vib').innerText = (latest.vibration_x || 0).toFixed(2) + " mm/s";
+            document.getElementById('kpi-status').style.color = getStatusColor(latest.system_status);
+
+            // Update Line Chart
+            const history = [...motorLogs].reverse();
+            trendChart.data.labels = history.map(item => parseNexusTime(item.created_at)); // created_at é o nome no banco
+            trendChart.data.datasets[0].data = history.map(item => item.temperature);
+            trendChart.data.datasets[1].data = history.map(item => item.current_amps);
+            trendChart.data.datasets[2].data = history.map(item => item.vibration_x);
+            trendChart.update('none');
+
+            // Update Doughnut Chart
+            let opCount = 0, maintCount = 0, stopCount = 0;
+            motorLogs.forEach(item => {
+                if (item.system_status === 'OPERATING') opCount++;
+                else if (item.system_status === 'MAINTENANCE') maintCount++;
+                else stopCount++;
+            });
+            statusChart.data.datasets[0].data = [opCount, maintCount, stopCount];
+            statusChart.update();
+
+            updateFailureTable(motorFailures);
+
+        } catch (error) {
+            console.error("[NEXUS ERROR] Refresh failed:", error);
+        }
+    }
+
+    /**
+     * 4. CHART CONFIGURATION
+     */
+    function initCharts() {
+        // Line Chart: Telemetry Trends
+        const trendCtx = document.getElementById('trendChart').getContext('2d');
+        trendChart = new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'Temp (°C)', data: [], borderColor: '#ff5252', tension: 0.3, fill: false },
+                    { label: 'Current (A)', data: [], borderColor: '#2196f3', tension: 0.3, fill: false },
+                    { label: 'Vibration (mm/s)', data: [], borderColor: '#ffeb3b', tension: 0.4 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { datalabels: { display: false } },
+                scales: {
+                    y: { grid: { color: 'rgba(128, 128, 128, 0.2)' } },
+                    x: { grid: { color: 'rgba(128, 128, 128, 0.2)' } }
+                }
+            }
+        });
+
+        // Doughnut Chart: Asset Status Distribution
+        const statusCtx = document.getElementById('statusChart').getContext('2d');
+        statusChart = new Chart(statusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['OPERATING', 'MAINTENANCE', 'STOPPED'],
+                datasets: [{
+                    data: [0, 0, 0],
+                    backgroundColor: ['#2ecc71', '#2196f3', '#ff5252'],
+                    borderWidth: 1,
+                    borderColor: '#1a1a1a'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: '#e0e0e0' } },
+                    datalabels: {
+                        color: '#fff',
+                        font: { weight: 'bold' },
+                        formatter: (value) => value > 0 ? value : ''
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * 5. DATA EXPORT & UTILITIES
+     */
+    async function exportToCSV() {
+        try {
+            const response = await fetch('/api/history');
+            const data = await response.json();
+            // Filter CSV data for current asset
+            const filtered = data.filter(log => String(log.id) === String(selectedMotorId));
+
+            let csvRows = ["\ufeffTimestamp,Asset_ID,Status,Temp_C,Current_A,Vib_mm/s"];
+            filtered.forEach(log => {
+                const time = parseNexusTime(log.created_at);
+                csvRows.push(`"${time}",${log.asset_id},${log.system_status},${log.temperature},${log.current_amps},${log.vibration_x || 0}`);
+            });
+
+            const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.setAttribute("download", `NEXUS_Asset_${selectedMotorId}_Report.csv`);
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        } catch (e) { alert("CSV Export failed."); }
+    }
+
+    async function exportToPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'mm', 'a4');
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 15;
+        let currentY = 20;
+
+        const assetSelect = document.getElementById('motorSelect');
+        const assetName = assetSelect.options[assetSelect.selectedIndex].text;
+
+        // Header logic
+        doc.setFontSize(18);
+        doc.setTextColor(33, 150, 243);
+        doc.text("NEXUS - Asset Telemetry Report", margin, currentY);
+        currentY += 10;
+        doc.setFontSize(11);
+        doc.setTextColor(100);
+        doc.text(`Asset Context: ${assetName}`, margin, currentY);
+        currentY += 15;
+
+        // Capture sections using your original html2canvas logic
+        const sections = [
+            { id: '.kpi-row', title: '1 - Current Status' },
+            { id: '.chart-pie', title: '2 - Availability Distribution' },
+            { id: '.chart-line', title: '3 - Telemetry Trends' },
+            { id: '.alert-table', title: '4 - Failure History' }
+        ];
+
+        for (const section of sections) {
+            const element = document.querySelector(section.id);
+            if (element) {
+                const canvas = await html2canvas(element, { backgroundColor: "#1a1a1a", scale: 2 });
+                const imgData = canvas.toDataURL("image/png");
+                const pdfWidth = pageWidth - (margin * 2);
+                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+                if (currentY + pdfHeight > 270) {
+                    doc.addPage();
+                    currentY = 20;
+                }
+
+                doc.setFontSize(12);
+                doc.text(section.title, margin, currentY);
+                currentY += 5;
+                doc.addImage(imgData, 'PNG', margin, currentY, pdfWidth, pdfHeight);
+                currentY += pdfHeight + 15;
+            }
+        }
+        doc.save(`NEXUS_Asset_${selectedMotorId}_Report.pdf`);
+    }
+
+    function updateSelectedMotor() {
+        selectedMotorId = document.getElementById('motorSelect').value;
+        refreshDashboard();
+    }
+
+    function toggleTheme() {
+        document.body.classList.toggle('light-mode');
+        const isLight = document.body.classList.contains('light-mode');
+        const gridColor = isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(128, 128, 128, 0.2)';
+
+        trendChart.options.scales.x.grid.color = gridColor;
+        trendChart.options.scales.y.grid.color = gridColor;
+        trendChart.update('none');
+    }
+
+    function getStatusColor(status) {
+        if (status === 'OPERATING') return '#2ecc71';
+        if (status === 'MAINTENANCE') return '#2196f3';
+        return '#ff5252';
+    }
+
+    function updateSelectedMotor() {
+        selectedMotorId = document.getElementById('motorSelect').value;
+        console.log("Selected Asset ID:", selectedMotorId);
+        refreshDashboard();
+    }
+
+    function resetKPIs() {
+        document.getElementById('kpi-status').innerText = "--";
+        document.getElementById('kpi-temp').innerText = "-- °C";
+        document.getElementById('kpi-vib').innerText = "-- mm/s";
+    }
+
+    function parseNexusTime(dateStr) {
+        if(!dateStr) return "";
+        return dateStr.includes('T') ? dateStr.split('T')[1].substring(0, 8) : dateStr.substring(11, 19);
+    }
+
+    function updateFailureTable(failures) {
+        const tableBody = document.getElementById('critical-events-body');
+        tableBody.innerHTML = '';
+
+        if (failures.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">No critical failures detected.</td></tr>`;
+            return;
+        }
+
+        failures.forEach(event => {
+            tableBody.innerHTML += `
+                <tr>
+                    <td>${parseNexusTime(event.created_at)}</td>
+                    <td>#00${event.asset_id}</td>
+                    <td style="color: #ff5252; font-weight: bold;">FAILURE</td>
+                    <td>${(event.temperature || 0).toFixed(1)} °C</td>
+                    <td>${(event.current_amps || 0).toFixed(2)} A</td>
+                    <td>${(event.vibration_x || 0).toFixed(2)} mm/s</td>
+                </tr>
+            `;
+        });
+    }
+</script>
+</body>
+</html>
