@@ -14,6 +14,3 @@ arduino-cli.exe
 # Ignorar pastas ocultas do IDE
 .idea/
 .vscode/
-
-# Ignorar credenciais
-DatabaseConfig.java
