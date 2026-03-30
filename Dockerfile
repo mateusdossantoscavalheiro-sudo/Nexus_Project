@@ -3,6 +3,6 @@ COPY . .
 RUN mvn clean package -DskipTests
 
 FROM eclipse-temurin:17-jdk-jammy
-COPY --from=build /target/*-with-dependencies.jar app.jar
+COPY --from=build /target/nexus-project-1.0-SNAPSHOT-jar-with-dependencies.jar app.jar
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

@@ -23,13 +23,15 @@ public class NexusSubscriber {
     private static final TelemetryDAO telemetryDAO = new TelemetryDAO();
 
     public static void main(String[] args) {
+        int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
+
         // Default asset
         engineFleet.put(1, new MotorData(1, "Main Lathe #01"));
 
         // Initialize Javalin
         var app = Javalin.create(config -> {
             config.staticFiles.add("/public");
-        }).start(System.getenv("PORT") != null ? Integer.parseInt(System.getenv("PORT")) : 8080);
+        }).start(port);
 
         // --- REST API ROUTES ---
 
