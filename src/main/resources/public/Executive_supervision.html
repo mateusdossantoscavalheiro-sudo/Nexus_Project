@@ -2,306 +2,419 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>NEXUS - Executive Supervision</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS EXECUTIVE | Plant Management</title>
     <style>
+        /* --- GLOBAL THEME --- */
         :root {
-            --bg-dark: #0f0f0f;
-            --panel-bg: #1a1a1a;
-            --nexus-blue: #2196f3;
-            --failure-red: #ff5252;
+            --bg-base: #050505;
+            --panel-bg: #111111;
+            --border-color: #333;
+            --accent-blue: #00bcd4;
             --text-main: #e0e0e0;
-            --green: #2ecc71;
+            --text-muted: #777;
+            --btn-hover: #008ba3;
+            --danger: #ff5252;
+            --danger-hover: #d50000;
         }
 
         body {
-            background: var(--bg-dark);
-            color: var(--text-main);
-            font-family: 'Segoe UI', Tahoma, sans-serif;
-            margin: 0; padding: 20px;
+            margin: 0; padding: 0;
+            background-color: var(--bg-base); color: var(--text-main);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex; height: 100vh; overflow: hidden;
+            box-sizing: border-box;
         }
 
-        .header-exec {
+        /* --- SIDEBAR (CRUD & LIST) --- */
+        .sidebar {
+            width: 380px;
+            background: var(--panel-bg);
+            border-right: 1px solid var(--border-color);
+            display: flex; flex-direction: column;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
             display: flex; justify-content: space-between; align-items: center;
-            border-bottom: 2px solid var(--nexus-blue);
-            padding-bottom: 15px; margin-bottom: 20px;
         }
 
-        .btn-nav {
-            background: transparent; border: 1px solid var(--nexus-blue);
-            color: var(--nexus-blue); padding: 8px 15px; cursor: pointer;
-            border-radius: 4px; transition: 0.3s;
-        }
-        .btn-nav:hover { background: var(--nexus-blue); color: white; }
+        .title-group h2 { margin: 0; color: var(--accent-blue); font-size: 1.2rem; letter-spacing: 2px; }
+        .title-group span { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; }
 
-        .stats-grid {
-            display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px;
-            margin-bottom: 30px;
+        .btn-logout {
+            background: transparent; border: 1px solid var(--border-color);
+            color: var(--text-main); padding: 5px 10px; cursor: pointer;
+            border-radius: 3px; font-size: 0.8rem; transition: 0.2s;
         }
+        .btn-logout:hover { border-color: var(--danger); color: var(--danger); }
 
-        .stat-card {
-            background: var(--panel-bg); padding: 20px; border-radius: 8px;
-            text-align: center; border: 1px solid #333;
+        .sidebar-actions { padding: 15px 20px; }
+
+        .btn-primary {
+            width: 100%; padding: 12px; background: var(--accent-blue);
+            color: #000; border: none; font-weight: bold; font-size: 0.9rem;
+            cursor: pointer; border-radius: 4px; text-transform: uppercase; transition: 0.2s;
         }
-        .stat-card h2 { color: var(--nexus-blue); margin: 10px 0; font-size: 2rem; }
+        .btn-primary:hover { background: var(--btn-hover); }
 
-        .management-section {
-            display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px;
-        }
-
-        .asset-list, .comparison-chart {
-            background: var(--panel-bg); padding: 25px; border-radius: 12px;
-            border: 1px solid #222;
+        .asset-list-container {
+            flex: 1; overflow-y: auto; padding: 0 20px 20px 20px;
         }
 
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th { color: var(--nexus-blue); text-align: left; padding: 12px; border-bottom: 1px solid #333; }
-        td { padding: 12px; border-bottom: 1px solid #222; font-size: 0.9rem; }
-
-        .btn-add {
-            background: var(--nexus-blue); color: white; border: none;
-            padding: 10px 20px; border-radius: 4px; cursor: pointer;
-            font-weight: bold; transition: 0.3s;
+        /* --- ASSET CARDS --- */
+        .asset-card {
+            background: #1a1a1a; border: 1px solid #2a2a2a;
+            border-radius: 6px; padding: 15px; margin-bottom: 15px;
+            transition: 0.2s;
         }
-        .btn-add:hover { background: #1976d2; transform: scale(1.05); }
+        .asset-card:hover { border-color: var(--accent-blue); }
 
-        .btn-delete {
-            background: none; border: 1px solid var(--failure-red); color: var(--failure-red);
-            padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.7rem;
+        .asset-header {
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid #333; padding-bottom: 8px; margin-bottom: 10px;
         }
-        .btn-delete:hover { background: var(--failure-red); color: white; }
+        .asset-id { font-weight: bold; color: var(--accent-blue); font-size: 1.1rem; }
+        .asset-name { font-size: 0.9rem; font-weight: 600; text-transform: uppercase; }
+
+        .asset-params { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-bottom: 15px; }
+        .param-box { background: #0a0a0a; padding: 8px; border-radius: 4px; text-align: center; border: 1px solid #222;}
+        .param-box span { display: block; font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; }
+        .param-box strong { font-size: 0.85rem; font-family: monospace; }
+
+        .card-actions { display: flex; gap: 10px; }
+        .btn-edit, .btn-delete {
+            flex: 1; padding: 8px; border: none; cursor: pointer; border-radius: 3px;
+            font-size: 0.8rem; font-weight: bold; text-transform: uppercase; transition: 0.2s;
+        }
+        .btn-edit { background: #333; color: white; }
+        .btn-edit:hover { background: #555; }
+        .btn-delete { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+        .btn-delete:hover { background: var(--danger); color: white; }
+
+        /* --- MAIN FLOOR PLAN --- */
+        .floor-plan-wrapper {
+            flex: 1; position: relative; background-color: #080808;
+            /* Industrial blueprint grid */
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+            overflow: hidden;
+        }
+
+        .floor-plan-title {
+            position: absolute; top: 20px; left: 30px;
+            color: rgba(255,255,255,0.2); font-size: 2rem; font-weight: bold;
+            letter-spacing: 5px; text-transform: uppercase; pointer-events: none;
+        }
+
+        /* Draggable Motor Icon */
+        .motor-node {
+            position: absolute; width: 50px; height: 50px;
+            background: radial-gradient(circle, #2a2a2a 0%, #111 100%);
+            border: 2px solid var(--accent-blue); border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-family: monospace; font-weight: bold; font-size: 1.2rem;
+            cursor: grab; box-shadow: 0 0 15px rgba(0, 188, 212, 0.2);
+            user-select: none; transition: box-shadow 0.2s;
+        }
+        .motor-node:active { cursor: grabbing; box-shadow: 0 0 25px rgba(0, 188, 212, 0.6); }
+        .motor-node span { position: absolute; bottom: -20px; font-size: 0.7rem; color: #aaa; white-space: nowrap; font-family: sans-serif; }
+
+        /* --- MODAL (CREATE / EDIT) --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center;
+            z-index: 100; backdrop-filter: blur(3px);
+        }
+
+        .modal-content {
+            background: var(--panel-bg); border: 1px solid var(--border-color);
+            width: 400px; padding: 25px; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+        }
+
+        .modal-content h3 { margin-top: 0; color: var(--accent-blue); border-bottom: 1px solid #333; padding-bottom: 10px; }
+
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px; }
+        .form-group input {
+            width: 100%; padding: 10px; background: #000; border: 1px solid #444;
+            color: white; border-radius: 4px; box-sizing: border-box; font-family: monospace;
+        }
+        .form-group input:focus { border-color: var(--accent-blue); outline: none; }
+
+        .modal-actions { display: flex; gap: 15px; margin-top: 25px; }
+        .btn-cancel { flex: 1; padding: 10px; background: transparent; border: 1px solid #555; color: white; cursor: pointer; border-radius: 4px; }
+        .btn-cancel:hover { background: #222; }
+        .btn-save { flex: 1; padding: 10px; background: var(--accent-blue); border: none; color: #000; font-weight: bold; cursor: pointer; border-radius: 4px; }
+        .btn-save:hover { background: var(--btn-hover); }
+
     </style>
 </head>
 <body>
 
-<div class="header-exec">
-    <div>
-        <h1 style="margin:0;">NEXUS <span style="font-weight: 300;">Core</span></h1>
-        <small style="color: var(--nexus-blue); letter-spacing: 2px;">EXECUTIVE PLANT MANAGER</small>
-    </div>
-    <button class="btn-nav" onclick="location.href='operation.html'">GO TO OPERATOR IHM</button>
-</div>
-
-<div class="stats-grid">
-    <div class="stat-card"><h3>Total Assets</h3><h2 id="total-assets">0</h2></div>
-    <div class="stat-card"><h3>Active (Operating)</h3><h2 id="active-assets" style="color: var(--green);">0</h2></div>
-    <div class="stat-card"><h3>Critical Alerts</h3><h2 id="critical-alerts" style="color: var(--failure-red);">0</h2></div>
-    <div class="stat-card"><h3>Plant Health</h3><h2>98.2%</h2></div>
-</div>
-
-<div class="management-section">
-    <div class="asset-list">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="margin:0;">Plant Inventory</h3>
-            <button class="btn-add" onclick="addNewAsset()">+ REGISTER NEW ASSET</button>
+<div class="sidebar">
+    <div class="sidebar-header">
+        <div class="title-group">
+            <h2>NEXUS MES</h2>
+            <span>Execution & Routing</span>
         </div>
-        <table>
-            <thead>
-            <tr>
-                <th>ID</th>
-                <th>Asset Name</th>
-                <th>Type</th>
-                <th>Safety Limit</th>
-                <th>Action</th>
-            </tr>
-            </thead>
-            <tbody id="asset-table-body">
-            </tbody>
-        </table>
+        <button class="btn-logout" onclick="window.location.href='index.html'">LOGOUT</button>
     </div>
 
-    <div class="comparison-chart">
-        <h3 style="margin-bottom: 20px;">Asset Temperature Profile</h3>
-        <canvas id="compareChart"></canvas>
+    <div class="sidebar-actions">
+        <button class="btn-primary" onclick="openModal()">+ Add New Asset</button>
+    </div>
+
+    <div class="asset-list-container" id="asset-list">
+    </div>
+</div>
+
+<div class="floor-plan-wrapper" id="floor-plan">
+    <div class="floor-plan-title">Factory Floor Layout</div>
+</div>
+
+<div class="modal-overlay" id="asset-modal">
+    <div class="modal-content">
+        <h3 id="modal-title">Register Asset</h3>
+
+        <div class="form-group">
+            <label>Asset ID (Numeric)</label>
+            <input type="number" id="inp-id" placeholder="e.g. 1">
+        </div>
+        <div class="form-group">
+            <label>Asset Name</label>
+            <input type="text" id="inp-name" placeholder="e.g. Main Lathe #01">
+        </div>
+        <div class="form-group">
+            <label>Temperature Threshold (°C)</label>
+            <input type="number" id="inp-temp" placeholder="60.0">
+        </div>
+        <div class="form-group">
+            <label>Current Threshold (A)</label>
+            <input type="number" id="inp-curr" placeholder="14.0">
+        </div>
+        <div class="form-group">
+            <label>Vibration Threshold (mm/s)</label>
+            <input type="number" id="inp-vib" placeholder="10.0">
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeModal()">CANCEL</button>
+            <button class="btn-save" onclick="saveAsset()">SAVE CONFIG</button>
+        </div>
     </div>
 </div>
 
 <script>
+    // Store visual positions of motors { "1": { left: "100px", top: "200px" } }
+    let nodePositions = JSON.parse(localStorage.getItem('nexus_floor_layout')) || {};
 
-    let myChart;
+    window.onload = loadAssets;
 
-    // 1. INITIALIZATION: Executes when the page finishes loading
-    window.onload = () => {
-        loadAssetsFromServer();
-        initChart();
-
-        setInterval(loadAssetsFromServer, 10000);
-    };
-
-    // 2. FETCH ASSETS (GET): Retrieves the engine fleet from the Java Backend
-    async function loadAssetsFromServer() {
-        try {
-            const [assetsRes, historyRes] = await Promise.all([
-                fetch('/api/assets'),
-                fetch('/api/history')
-            ]);
-
-            const assets = await assetsRes.json();
-            const history = await historyRes.json();
-
-            const tableBody = document.getElementById('asset-table-body');
-            tableBody.innerHTML = '';
-
-            let labels = [];
-            let operatingTimes = [];
-
-            assets.forEach(asset => {
-
-                tableBody.innerHTML += `
-                    <tr>
-                        <td>#00${asset.id}</td>
-                        <td>${asset.name}</td>
-                        <td>${asset.limitTemp}°C | ${asset.limitCurr}A | ${asset.limitVib}mm/s</td>
-                        <td><span class="status-indicator"></span>ACTIVE</td>
-                        <td><button class="btn-nav" style="border-color: #ff5252; color: #ff5252;" onclick="deleteAsset(${asset.id})">Remove</button></td>
-                    </tr>
-                `;
-
-                labels.push(asset.name);
-                const uptimeCount = history.filter(log =>
-                    String(log.asset_id) === String(asset.id) && log.system_status === 'OPERATING'
-                ).length;
-
-                operatingTimes.push(uptimeCount);
-            });
-
-            refreshChartData(labels, operatingTimes);
-
-            if(document.getElementById('total-assets')) {
-                document.getElementById('total-assets').innerText = assets.length;
-            }
-
-        } catch (error) {
-            console.error("FETCH ERROR:", error);
-        }
+    /**
+     * FETCH CORE ASSETS
+     */
+    function loadAssets() {
+        fetch('/api/assets')
+            .then(res => res.json())
+            .then(data => {
+                renderSidebar(data);
+                renderFloorPlan(data);
+            })
+            .catch(err => console.error("[MES] Fetch error:", err));
     }
 
-    // 3. UI UPDATE: Populates the table, stat cards, and chart data
-    function updateDashboardUI(assets) {
-        const tbody = document.getElementById('asset-table-body');
-        tbody.innerHTML = '';
+    /**
+     * RENDER LEFT SIDEBAR
+     */
+    function renderSidebar(assets) {
+        const container = document.getElementById('asset-list');
+        container.innerHTML = '';
 
-        // Update Total Assets counter
-        document.getElementById('total-assets').innerText = assets.length;
-
-        let operatingCount = 0;
-        let chartLabels = [];
-        let chartLimits = [];
+        if (assets.length === 0) {
+            container.innerHTML = `<p style="color:#555; text-align:center; font-size:0.9rem; margin-top:20px;">No assets detected on plant floor.</p>`;
+            return;
+        }
 
         assets.forEach(asset => {
-            // Check operational status for the stat card
-            if (asset.state === 'OPERATING') operatingCount++;
-
-            // Prepare data arrays for the bar chart
-            chartLabels.push(asset.name);
-            chartLimits.push(asset.limitTemp || 60);
-
-            // Inject new row into the Inventory Table
-            tbody.innerHTML += `
-                <tr>
-                    <td>#00${asset.id}</td>
-                    <td><strong>${asset.name}</strong></td>
-                    <td>Industrial Motor</td>
-                    <td style="color: var(--failure-red); font-weight: bold;">
-                        ${asset.limitTemp}°C | ${asset.limitCurr}A | ${asset.limitVib}mm/s
-                    </td>
-                    <td>
-                        <button class="btn-delete" onclick="deleteAsset(${asset.id})">DELETE</button>
-                    </td>
-                </tr>
+            const card = document.createElement('div');
+            card.className = 'asset-card';
+            card.innerHTML = `
+                <div class="asset-header">
+                    <span class="asset-id">ID: ${asset.id}</span>
+                    <span class="asset-name">${asset.name}</span>
+                </div>
+                <div class="asset-params">
+                    <div class="param-box"><span>TEMP</span><strong>${asset.limitTemp} °C</strong></div>
+                    <div class="param-box"><span>CURR</span><strong>${asset.limitCurr} A</strong></div>
+                    <div class="param-box"><span>VIBE</span><strong>${asset.limitVib}</strong></div>
+                </div>
+                <div class="card-actions">
+                    <button class="btn-edit" onclick='openModal(${JSON.stringify(asset)})'>EDIT</button>
+                    <button class="btn-delete" onclick="deleteAsset(${asset.id})">REMOVE</button>
+                </div>
             `;
+            container.appendChild(card);
         });
-
-        document.getElementById('active-assets').innerText = operatingCount;
-        refreshChartData(chartLabels, chartLimits);
     }
 
-    // 4. REGISTER ASSET (POST): Sends new motor data to the Java engineFleet
-    async function addNewAsset() {
-        const id = prompt("Enter Unique Asset ID (Numeric):");
-        if (!id || isNaN(id)) return;
+    /**
+     * RENDER FLOOR PLAN NODES
+     */
+    function renderFloorPlan(assets) {
+        const floor = document.getElementById('floor-plan');
+        // Clear existing nodes but keep the title
+        document.querySelectorAll('.motor-node').forEach(node => node.remove());
 
-        const name = prompt("Enter Asset Name (e.g., CNC Milling #02):");
-        if (!name) return;
+        assets.forEach((asset, index) => {
+            const node = document.createElement('div');
+            node.className = 'motor-node';
+            node.innerText = asset.id;
 
-        const tempLimit = prompt("Set Safety Temperature Threshold (°C):", "60.0");
-        const currLimit = prompt("Set Safety Current Threshold (A):", "15.0");
-        const vibLimit = prompt("Set Safety Vibration Threshold (mm/s):", "10.0");
+            const label = document.createElement('span');
+            label.innerText = asset.name;
+            node.appendChild(label);
 
+            // Check localStorage for saved position, otherwise cascade them
+            if (nodePositions[asset.id]) {
+                node.style.left = nodePositions[asset.id].left;
+                node.style.top = nodePositions[asset.id].top;
+            } else {
+                node.style.left = (100 + (index * 80)) + "px";
+                node.style.top = "100px";
+            }
+
+            // Attach Drag Logic
+            makeDraggable(node, asset.id);
+            floor.appendChild(node);
+        });
+    }
+
+    /**
+     * DRAG AND DROP ENGINE
+     */
+    function makeDraggable(element, id) {
+        let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+
+        element.onmousedown = dragMouseDown;
+
+        function dragMouseDown(e) {
+            e.preventDefault();
+            pos3 = e.clientX;
+            pos4 = e.clientY;
+            document.onmouseup = closeDragElement;
+            document.onmousemove = elementDrag;
+        }
+
+        function elementDrag(e) {
+            e.preventDefault();
+            pos1 = pos3 - e.clientX;
+            pos2 = pos4 - e.clientY;
+            pos3 = e.clientX;
+            pos4 = e.clientY;
+
+            element.style.top = (element.offsetTop - pos2) + "px";
+            element.style.left = (element.offsetLeft - pos1) + "px";
+        }
+
+        function closeDragElement() {
+            document.onmouseup = null;
+            document.onmousemove = null;
+            // Save new coordinates to localStorage
+            nodePositions[id] = { left: element.style.left, top: element.style.top };
+            localStorage.setItem('nexus_floor_layout', JSON.stringify(nodePositions));
+        }
+    }
+
+    /**
+     * MODAL CONTROLS (CREATE / EDIT)
+     */
+    function openModal(asset = null) {
+        const modal = document.getElementById('asset-modal');
+        const title = document.getElementById('modal-title');
+        const inpId = document.getElementById('inp-id');
+
+        if (asset) {
+            title.innerText = "Edit Asset Configuration";
+            inpId.value = asset.id;
+            inpId.disabled = true; // Cannot change ID once created
+            document.getElementById('inp-name').value = asset.name;
+            document.getElementById('inp-temp').value = asset.limitTemp;
+            document.getElementById('inp-curr').value = asset.limitCurr;
+            document.getElementById('inp-vib').value = asset.limitVib;
+        } else {
+            title.innerText = "Provision New Asset";
+            inpId.value = '';
+            inpId.disabled = false;
+            document.getElementById('inp-name').value = '';
+            document.getElementById('inp-temp').value = '60.0';
+            document.getElementById('inp-curr').value = '14.0';
+            document.getElementById('inp-vib').value = '10.0';
+        }
+        modal.style.display = "flex";
+    }
+
+    function closeModal() {
+        document.getElementById('asset-modal').style.display = "none";
+    }
+
+    /**
+     * API COMMUNICATION
+     */
+    function saveAsset() {
+        // These keys EXACTLY match the Java backend
         const payload = {
-            id: parseInt(id),
-            name: name,
-            limitTemp: parseFloat(tempLimit || 60.0),
-            limitCurr: parseFloat(currLimit || 15.0),
-            limitVib: parseFloat(vibLimit || 10.0)
+            id: parseInt(document.getElementById('inp-id').value),
+            name: document.getElementById('inp-name').value,
+            limitTemp: parseFloat(document.getElementById('inp-temp').value),
+            limitCurr: parseFloat(document.getElementById('inp-curr').value),
+            limitVib: parseFloat(document.getElementById('inp-vib').value)
         };
 
-        try {
-            const response = await fetch('/api/assets', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (response.ok) {
-                alert("SUCCESS: Asset '" + name + "' registered in NEXUS Core.");
-                loadAssetsFromServer(); // Instant refresh of the UI
-            } else {
-                alert("SERVER ERROR: Check Java Console logs.");
-            }
-        } catch (error) {
-            alert("CONNECTION ERROR: Is the Java Backend running?");
+        // Basic validation
+        if (!payload.id || !payload.name) {
+            alert("ID and Name are required.");
+            return;
         }
-    }
 
-    // 5. CHARTING LOGIC (Chart.js Integration)
-    function initChart() {
-        const canvas = document.getElementById('compareChart');
-        if (!canvas) return;
-
-        const ctx = canvas.getContext('2d');
-        myChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Uptime (Operating Cycles)',
-                    data: [],
-                    backgroundColor: 'rgba(46, 204, 113, 0.4)',
-                    borderColor: '#2ecc71',
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: { display: true, text: 'Total Cycles in Operating State', color: '#888' },
-                        grid: { color: '#333' }
-                    },
-                    x: { grid: { display: false } }
-                },
-                plugins: {
-                    legend: { labels: { color: '#e0e0e0' } }
-                }
+        // Upsert: POST acts as both Create and Update in Java
+        fetch('/api/assets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => {
+            if(res.ok) {
+                closeModal();
+                loadAssets(); // Refresh UI
+            } else {
+                alert("Error provisioning asset.");
             }
         });
-    }
-
-    function refreshChartData(labels, data) {
-        if (myChart) {
-            myChart.data.labels = labels;
-            myChart.data.datasets[0].data = data;
-            myChart.update();
-        }
     }
 
     function deleteAsset(id) {
-        console.log("[NEXUS] Flagging Asset ID " + id + " for removal.");
-        alert("Action Registered. This asset will be removed upon next database sync.");
+        if (confirm("Are you sure you want to permanently remove Asset ID: " + id + "?")) {
+
+            // IMPORTANT NOTE FOR BACKEND:
+            // Your current Java code does not have a DELETE route.
+            // To make this fully work, you will need to add: app.delete("/api/assets/{id}"...) in Javalin
+
+            fetch('/api/assets/' + id, { method: 'DELETE' })
+            .then(() => {
+                // Clean up local storage position
+                delete nodePositions[id];
+                localStorage.setItem('nexus_floor_layout', JSON.stringify(nodePositions));
+                loadAssets();
+            })
+            .catch(err => console.error("Delete failed:", err));
+        }
     }
 </script>
-
 </body>
 </html>
