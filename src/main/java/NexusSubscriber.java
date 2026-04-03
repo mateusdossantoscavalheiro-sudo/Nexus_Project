@@ -60,10 +60,15 @@ public class NexusSubscriber {
                 newMotor.limitTemp = limitTemp;
                 newMotor.limitCurr = limitCurr;
                 newMotor.limitVib = limitVib;
-
                 engineFleet.put(id, newMotor);
-                ctx.status(201).result("Asset Registered");
+
+                telemetryDAO.saveOrUpdateAsset(id, name, limitTemp, limitCurr, limitVib);
+
+                System.out.println("[CORE] Asset " + id + " registered and synced with database.");
+                ctx.status(201).result("Asset Registered and Synced");
+
             } catch (Exception e) {
+                System.err.println("[CORE ERROR] Registration failed: " + e.getMessage());
                 ctx.status(400).result("Invalid Data: " + e.getMessage());
             }
         });

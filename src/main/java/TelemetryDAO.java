@@ -57,6 +57,31 @@ public class TelemetryDAO {
         return history;
     }
 
+    public void saveOrUpdateAsset(int id, String name, double limitTemp, double limitCurr, double limitVib) {
+
+        String sql = "INSERT INTO assets (id, name, \"limitTemp\", \"limitCurr\", \"limitVib\") " +
+                "VALUES (?, ?, ?, ?, ?) " +
+                "ON CONFLICT (id) DO UPDATE SET " +
+                "name = EXCLUDED.name, \"limitTemp\" = EXCLUDED.\"limitTemp\", " +
+                "\"limitCurr\" = EXCLUDED.\"limitCurr\", \"limitVib\" = EXCLUDED.\"limitVib\"";
+
+        try (Connection conn = DriverManager.getConnection(DatabaseConfig.URL, DatabaseConfig.USER, DatabaseConfig.PASS);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, id);
+            pstmt.setString(2, name);
+            pstmt.setDouble(3, limitTemp);
+            pstmt.setDouble(4, limitCurr);
+            pstmt.setDouble(5, limitVib);
+
+            pstmt.executeUpdate();
+            System.out.println("[DATABASE] Asset " + id + " synced with Supabase.");
+
+        } catch (SQLException e) {
+            System.err.println("[DATABASE ERROR] Failed to sync asset: " + e.getMessage());
+        }
+    }
+
     public List<JSONObject> getCriticalFailures(int limit) {
         List<JSONObject> failures = new ArrayList<>();
         // SQL filtering only for LOCKED_FAILURE
