@@ -81,6 +81,28 @@ public class TelemetryDAO {
         }
     }
 
+    public List<JSONObject> getAllAssets() {
+        List<JSONObject> list = new ArrayList<>();
+        String sql = "SELECT * FROM assets";
+        try (Connection conn = DriverManager.getConnection(DatabaseConfig.URL, DatabaseConfig.USER, DatabaseConfig.PASS);
+             PreparedStatement pstmt = conn.prepareStatement(sql);
+             ResultSet rs = pstmt.executeQuery()) {
+            while (rs.next()) {
+                JSONObject json = new JSONObject();
+                json.put("id", rs.getInt("id"));
+                json.put("name", rs.getString("name"));
+                json.put("limitTemp", rs.getDouble("limitTemp"));
+                json.put("limitCurr", rs.getDouble("limitCurr"));
+                json.put("limitVib", rs.getDouble("limitVib"));
+                json.put("state", rs.getString("state"));
+                list.add(json);
+            }
+        } catch (SQLException e) {
+            System.err.println("[DATABASE ERROR] Could not load assets: " + e.getMessage());
+        }
+        return list;
+    }
+
     public List<JSONObject> getCriticalFailures(int limit) {
         List<JSONObject> failures = new ArrayList<>();
         // SQL filtering only for LOCKED_FAILURE

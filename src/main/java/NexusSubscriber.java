@@ -25,8 +25,16 @@ public class NexusSubscriber {
     public static void main(String[] args) {
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
 
-        // Default asset
-        engineFleet.put(1, new MotorData(1, "Main Lathe #01"));
+        List<JSONObject> saved = telemetryDAO.getAllAssets();
+        for (JSONObject a : saved) {
+            MotorData m = new MotorData(a.getInt("id"), a.getString("name"));
+            m.limitTemp = a.getDouble("limitTemp");
+            m.limitCurr = a.getDouble("limitCurr");
+            m.limitVib = a.getDouble("limitVib");
+            m.state = a.getString("state");
+            engineFleet.put(m.id, m);
+        }
+        System.out.println("[SYSTEM] Loaded " + engineFleet.size() + " assets from database.");
 
         // Initialize Javalin
         var app = Javalin.create(config -> {
@@ -52,24 +60,19 @@ public class NexusSubscriber {
                 JSONObject body = new JSONObject(ctx.body());
                 int id = body.getInt("id");
                 String name = body.getString("name");
-                double limitTemp = body.getDouble("limitTemp");
-                double limitCurr = body.getDouble("limitCurr");
-                double limitVib = body.getDouble("limitVib");
 
-                MotorData newMotor = new MotorData(id, name);
-                newMotor.limitTemp = limitTemp;
-                newMotor.limitCurr = limitCurr;
-                newMotor.limitVib = limitVib;
-                engineFleet.put(id, newMotor);
+                MotorData motor = new MotorData(id, name);
+                motor.limitTemp = body.getDouble("limitTemp");
+                motor.limitCurr = body.getDouble("limitCurr");
+                motor.limitVib = body.getDouble("limitVib");
 
-                telemetryDAO.saveOrUpdateAsset(id, name, limitTemp, limitCurr, limitVib);
+                engineFleet.put(id, motor); // Salva na RAM
+                telemetryDAO.saveOrUpdateAsset(id, name, motor.limitTemp, motor.limitCurr, motor.limitVib); // Salva no Supabase
 
-                System.out.println("[CORE] Asset " + id + " registered and synced with database.");
-                ctx.status(201).result("Asset Registered and Synced");
-
+                ctx.status(201).result("Created");
             } catch (Exception e) {
-                System.err.println("[CORE ERROR] Registration failed: " + e.getMessage());
-                ctx.status(400).result("Invalid Data: " + e.getMessage());
+                e.printStackTrace();
+                ctx.status(400).result("Error: " + e.getMessage());
             }
         });
 
