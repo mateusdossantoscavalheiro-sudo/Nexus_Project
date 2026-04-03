@@ -342,7 +342,8 @@
         if (asset) {
             title.innerText = "Edit Asset Configuration";
             inpId.value = asset.id;
-            inpId.disabled = true; // Cannot change ID once created
+            inpId.readOnly = true;
+            inpId.style.opacity = "0.5";
             document.getElementById('inp-name').value = asset.name;
             document.getElementById('inp-temp').value = asset.limitTemp;
             document.getElementById('inp-curr').value = asset.limitCurr;
@@ -364,25 +365,30 @@
     }
 
     /**
-     * API COMMUNICATION
+     * SAVE ASSET (FIXED KEYS FOR JAVA CORE)
      */
     function saveAsset() {
-        // These keys EXACTLY match the Java backend
-        const payload = {
-            id: parseInt(document.getElementById('inp-id').value),
-            name: document.getElementById('inp-name').value,
-            limitTemp: parseFloat(document.getElementById('inp-temp').value),
-            limitCurr: parseFloat(document.getElementById('inp-curr').value),
-            limitVib: parseFloat(document.getElementById('inp-vib').value)
-        };
+        const idVal = parseInt(document.getElementById('inp-id').value);
+        const nameVal = document.getElementById('inp-name').value;
+        const tempVal = parseFloat(document.getElementById('inp-temp').value);
+        const currVal = parseFloat(document.getElementById('inp-curr').value);
+        const vibVal = parseFloat(document.getElementById('inp-vib').value);
 
-        // Basic validation
-        if (!payload.id || !payload.name) {
-            alert("ID and Name are required.");
+        if (isNaN(idVal) || !nameVal) {
+            alert("Valid ID and Name are required.");
             return;
         }
 
-        // Upsert: POST acts as both Create and Update in Java
+        const payload = {
+            id: idVal,
+            name: nameVal,
+            limitTemp: tempVal,
+            limitCurr: currVal,
+            limitVib: vibVal
+        };
+
+        console.log("[NEXUS] Sending Payload:", payload);
+
         fetch('/api/assets', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -390,12 +396,14 @@
         })
         .then(res => {
             if(res.ok) {
+                console.log("[NEXUS] Asset saved successfully!");
                 closeModal();
-                loadAssets(); // Refresh UI
+                loadAssets();
             } else {
-                alert("Error provisioning asset.");
+                alert("Error: Server rejected the asset data.");
             }
-        });
+        })
+        .catch(err => console.error("[NEXUS] Critical Error:", err));
     }
 
     function deleteAsset(id) {
