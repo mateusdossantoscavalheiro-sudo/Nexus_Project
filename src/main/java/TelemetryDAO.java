@@ -58,9 +58,8 @@ public class TelemetryDAO {
     }
 
     public void saveOrUpdateAsset(int id, String name, double limitTemp, double limitCurr, double limitVib) {
-
-        String sql = "INSERT INTO assets (id, name, \"limitTemp\", \"limitCurr\", \"limitVib\") " +
-                "VALUES (?, ?, ?, ?, ?) " +
+        String sql = "INSERT INTO assets (id, name, \"limitTemp\", \"limitCurr\", \"limitVib\", state) " +
+                "VALUES (?, ?, ?, ?, ?, 'OFFLINE') " +
                 "ON CONFLICT (id) DO UPDATE SET " +
                 "name = EXCLUDED.name, \"limitTemp\" = EXCLUDED.\"limitTemp\", " +
                 "\"limitCurr\" = EXCLUDED.\"limitCurr\", \"limitVib\" = EXCLUDED.\"limitVib\"";
@@ -75,10 +74,10 @@ public class TelemetryDAO {
             pstmt.setDouble(5, limitVib);
 
             pstmt.executeUpdate();
-            System.out.println("[DATABASE] Asset " + id + " synced with Supabase.");
-
+            System.out.println("[DB] Sync Success for ID: " + id);
         } catch (SQLException e) {
-            System.err.println("[DATABASE ERROR] Failed to sync asset: " + e.getMessage());
+            System.err.println("[DB ERROR] Detail: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
