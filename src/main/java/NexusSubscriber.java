@@ -1,16 +1,18 @@
 import io.javalin.Javalin;
 import io.javalin.websocket.WsContext;
+import io.javalin.http.staticfiles.Location;
 import org.eclipse.paho.client.mqttv3.*;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import java.util.List;
 import java.util.ArrayList;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
 /**
  * NEXUS Industrial Controller - Core Server
- * Version: 4 (Internet Integration)
+ * Version: 4.1 (FIXED - Database Integration)
  * Role: Bridges MQTT, WebSockets, and REST API with Dynamic Asset Switching.
  */
 public class NexusSubscriber {
@@ -20,60 +22,153 @@ public class NexusSubscriber {
     private static final Map<String, WsContext> sessions = new ConcurrentHashMap<>();
 
     private static IMqttClient mqttClient;
-    // Note: Assuming TelemetryDAO is in your project. If not, comment out DAO lines.
     private static final TelemetryDAO telemetryDAO = new TelemetryDAO();
 
     public static void main(String[] args) {
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
 
-        List<JSONObject> saved = telemetryDAO.getAllAssets();
-        for (JSONObject a : saved) {
-            MotorData m = new MotorData(a.getInt("id"), a.getString("name"));
-            m.limitTemp = a.getDouble("limitTemp");
-            m.limitCurr = a.getDouble("limitCurr");
-            m.limitVib = a.getDouble("limitVib");
-            m.state = a.getString("state");
-            engineFleet.put(m.id, m);
-        }
-        System.out.println("[SYSTEM] Loaded " + engineFleet.size() + " assets from database.");
+        try {
+            List<JSONObject> saved = telemetryDAO.getAllAssets();
+            System.out.println("[DATABASE] Attempting to load assets from Supabase...");
 
-        // Initialize Javalin
+            for (JSONObject a : saved) {
+                MotorData m = new MotorData(a.getInt("id"), a.getString("name"));
+                m.limitTemp = a.getDouble("limitTemp");
+                m.limitCurr = a.getDouble("limitCurr");
+                m.limitVib = a.getDouble("limitVib");
+                m.state = a.getString("state");
+                engineFleet.put(m.id, m);
+            }
+            System.out.println("[SYSTEM] ✅ Loaded " + engineFleet.size() + " assets from database.");
+        } catch (Exception e) {
+            System.err.println("[DATABASE] ⚠️ Failed to load assets from database: " + e.getMessage());
+            System.err.println("[SYSTEM] Starting with empty asset fleet. You can add assets via the UI.");
+            e.printStackTrace();
+        }
+
         var app = Javalin.create(config -> {
-            config.staticFiles.add("/public");
+            // Servir arquivos estáticos da pasta resources/public
+            config.staticFiles.add(staticFiles -> {
+                staticFiles.hostedPath = "/";
+                staticFiles.directory = "/public";
+                staticFiles.location = Location.CLASSPATH;
+            });
+
+            config.bundledPlugins.enableCors(cors -> {
+                cors.addRule(it -> {
+                    it.anyHost();
+                });
+            });
         }).start(port);
 
         // --- REST API ROUTES ---
 
+        app.get("/api/health", ctx -> {
+            JSONObject health = new JSONObject();
+            health.put("status", "online");
+            health.put("assets_count", engineFleet.size());
+            health.put("db_connection", testDatabaseConnection());
+            ctx.json(health.toString()).contentType("application/json");
+        });
+
         app.get("/api/history", ctx -> {
-            ctx.json(telemetryDAO.getHistory(1000));
+            try {
+                List<JSONObject> history = telemetryDAO.getHistory(1000);
+                JSONArray arr = new JSONArray();
+                for (JSONObject obj : history) {
+                    arr.put(obj);
+                }
+                ctx.result(arr.toString()).contentType("application/json");
+            } catch (Exception e) {
+                ctx.status(500).result("Error fetching history: " + e.getMessage());
+            }
         });
 
         app.get("/api/failures", ctx -> {
-            ctx.json(telemetryDAO.getCriticalFailures(100));
+            try {
+                List<JSONObject> failures = telemetryDAO.getCriticalFailures(100);
+                JSONArray arr = new JSONArray();
+                for (JSONObject obj : failures) {
+                    arr.put(obj);
+                }
+                ctx.result(arr.toString()).contentType("application/json");
+            } catch (Exception e) {
+                ctx.status(500).result("Error fetching failures: " + e.getMessage());
+            }
         });
 
         app.get("/api/assets", ctx -> {
-            ctx.json(engineFleet.values().stream().map(MotorData::toJson).toList());
+            try {
+                JSONArray arr = new JSONArray();
+                for (MotorData m : engineFleet.values()) {
+                    arr.put(new JSONObject(m.toJson()));
+                }
+                ctx.result(arr.toString()).contentType("application/json");
+                System.out.println("[API] Returned " + engineFleet.size() + " assets");
+            } catch (Exception e) {
+                System.err.println("[API ERROR] Failed to serialize assets: " + e.getMessage());
+                ctx.status(500).result("Internal error");
+            }
         });
 
         app.post("/api/assets", ctx -> {
             try {
-                JSONObject body = new JSONObject(ctx.body());
+                String bodyStr = ctx.body();
+                System.out.println("[API] Received POST /api/assets with body: " + bodyStr);
+
+                JSONObject body = new JSONObject(bodyStr);
+
+                if (!body.has("id") || !body.has("name")) {
+                    ctx.status(400).result("Missing required fields: id and name");
+                    return;
+                }
+
                 int id = body.getInt("id");
                 String name = body.getString("name");
 
                 MotorData motor = new MotorData(id, name);
-                motor.limitTemp = body.getDouble("limitTemp");
-                motor.limitCurr = body.getDouble("limitCurr");
-                motor.limitVib = body.getDouble("limitVib");
 
-                engineFleet.put(id, motor); // Salva na RAM
-                telemetryDAO.saveOrUpdateAsset(id, name, motor.limitTemp, motor.limitCurr, motor.limitVib); // Salva no Supabase
+                motor.limitTemp = body.optDouble("limitTemp", 60.0);
+                motor.limitCurr = body.optDouble("limitCurr", 14.0);
+                motor.limitVib = body.optDouble("limitVib", 10.0);
 
-                ctx.status(201).result("Created");
+                engineFleet.put(id, motor);
+                System.out.println("[API] Asset ID " + id + " saved to RAM");
+
+                try {
+                    telemetryDAO.saveOrUpdateAsset(id, name, motor.limitTemp, motor.limitCurr, motor.limitVib);
+                    System.out.println("[API] Asset ID " + id + " synced to Supabase");
+                    ctx.status(201).result("Asset created and synced to database");
+                } catch (Exception dbError) {
+                    System.err.println("[API] Failed to sync to database: " + dbError.getMessage());
+                    ctx.status(201).result("Asset created in memory, but database sync failed: " + dbError.getMessage());
+                }
+
             } catch (Exception e) {
                 e.printStackTrace();
-                ctx.status(400).result("Error: " + e.getMessage());
+                ctx.status(400).result("Error parsing request: " + e.getMessage());
+            }
+        });
+
+        app.delete("/api/assets/{id}", ctx -> {
+            try {
+                int id = Integer.parseInt(ctx.pathParam("id"));
+
+                if (engineFleet.remove(id) != null) {
+                    System.out.println("[API] Asset ID " + id + " removed from fleet");
+
+                    try {
+                        telemetryDAO.deleteAsset(id);
+                    } catch (Exception e) {
+                        System.err.println("[API] Failed to delete from database: " + e.getMessage());
+                    }
+
+                    ctx.status(200).result("Asset deleted");
+                } else {
+                    ctx.status(404).result("Asset not found");
+                }
+            } catch (Exception e) {
+                ctx.status(500).result("Error: " + e.getMessage());
             }
         });
 
@@ -82,16 +177,39 @@ public class NexusSubscriber {
             ws.onConnect(ctx -> {
                 sessions.put(ctx.sessionId(), ctx);
                 System.out.println("[WS] UI Connection Established: " + ctx.sessionId());
+
+                JSONArray currentState = new JSONArray();
+                for (MotorData m : engineFleet.values()) {
+                    currentState.put(new JSONObject(m.toJson()));
+                }
+                ctx.send(currentState.toString());
             });
-            ws.onClose(ctx -> sessions.remove(ctx.sessionId()));
+
+            ws.onClose(ctx -> {
+                sessions.remove(ctx.sessionId());
+                System.out.println("[WS] Connection closed: " + ctx.sessionId());
+            });
+
             ws.onMessage(ctx -> handleWebCommand(ctx.message()));
         });
 
         setupMQTT();
 
         System.out.println("\n======================================");
-        System.out.println("   NEXUS CORE SYSTEM - ONLINE V2.5    ");
+        System.out.println("   NEXUS CORE SYSTEM - ONLINE V4.1   ");
+        System.out.println("======================================");
+        System.out.println("   Server running on port: " + port);
+        System.out.println("   Assets loaded: " + engineFleet.size());
         System.out.println("======================================\n");
+    }
+
+    private static String testDatabaseConnection() {
+        try {
+            telemetryDAO.getAllAssets();
+            return "connected";
+        } catch (Exception e) {
+            return "disconnected: " + e.getMessage();
+        }
     }
 
     private static void setupMQTT() {
@@ -105,6 +223,7 @@ public class NexusSubscriber {
             options.setAutomaticReconnect(true);
 
             mqttClient.connect(options);
+            System.out.println("[MQTT] Connected to HiveMQ broker");
 
             // Listen to telemetry from ANY motor ID
             mqttClient.subscribe("nexus/motor/+/telemetry", (topic, msg) -> {
@@ -117,7 +236,11 @@ public class NexusSubscriber {
                         motor.updateFromHardware(json);
 
                         // Save to database
-                        telemetryDAO.insertTelemetry(motor.id, motor.temp, motor.humi, motor.curr, motor.vib, motor.state);
+                        try {
+                            telemetryDAO.insertTelemetry(motor.id, motor.temp, motor.humi, motor.curr, motor.vib, motor.state);
+                        } catch (Exception e) {
+                            System.err.println("[MQTT] Failed to save telemetry to DB: " + e.getMessage());
+                        }
 
                         // Broadcast to all Web UIs
                         broadcastToWeb(motor.toJson());
@@ -128,26 +251,19 @@ public class NexusSubscriber {
             });
         } catch (MqttException e) {
             System.err.println("[MQTT] Connection Failed: " + e.getMessage());
+            System.err.println("[MQTT] System will work without MQTT hardware integration");
         }
     }
 
-    /**
-     * UPDATED: Processes commands and context switches
-     */
     private static void handleWebCommand(String fullCommand) {
         try {
-            // New Logic: Handle "SWITCH_ID:X" command
             if (fullCommand.startsWith("SWITCH_ID:")) {
                 String targetId = fullCommand.split(":")[1];
                 System.out.println("[CORE] Context Switch Requested -> Simulate ID: " + targetId);
-
-                // Notify ESP32 to change its reporting ID
-                // Topic: nexus/motor/control (Global control channel)
                 mqttClient.publish("nexus/motor/control", new MqttMessage(fullCommand.getBytes()));
                 return;
             }
 
-            // Standard Logic: Handle "ID:ACTION" (e.g., "1:START")
             String[] parts = fullCommand.split(":");
             int motorId = Integer.parseInt(parts[0]);
             String action = parts[1];
@@ -163,7 +279,9 @@ public class NexusSubscriber {
 
     private static void broadcastToWeb(String data) {
         sessions.values().forEach(s -> {
-            if (s.session.isOpen()) s.send(data);
+            if (s.session.isOpen()) {
+                s.send(data);
+            }
         });
     }
 
@@ -188,10 +306,10 @@ public class NexusSubscriber {
         }
 
         public void updateFromHardware(JSONObject json) {
-            this.temp = json.getDouble("temp");
-            this.humi = json.getDouble("humi");
-            this.curr = json.getDouble("curr");
-            this.vib = json.getDouble("vib");
+            this.temp = json.optDouble("temp", 0.0);
+            this.humi = json.optDouble("humi", 0.0);
+            this.curr = json.optDouble("curr", 0.0);
+            this.vib = json.optDouble("vib", 0.0);
             if(json.has("state")) this.state = json.getString("state");
             checkSafetyProcedures();
         }
@@ -218,19 +336,24 @@ public class NexusSubscriber {
                 System.err.println("[SECURITY] EMERGENCY SHUTDOWN ID " + id + ": " + reason);
                 mqttClient.publish("nexus/motor/" + id + "/control", new MqttMessage("STOP".getBytes()));
                 broadcastToWeb(this.toJson());
-            } catch (Exception e) { e.printStackTrace(); }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
-
 
         public String toJson() {
             return new JSONObject()
-                    .put("id", id).put("name", name)
-                    .put("temp", temp).put("humi", humi)
-                    .put("curr", curr).put("vib", vib)
-                    .put("limitTemp", limitTemp)
-                    .put("limitCurr", limitCurr)
-                    .put("limitVib", limitVib)
-                    .put("state", state).toString();
+                    .put("id", this.id)
+                    .put("name", this.name)
+                    .put("temp", this.temp)
+                    .put("humi", this.humi)
+                    .put("curr", this.curr)
+                    .put("vib", this.vib)
+                    .put("limitTemp", this.limitTemp)
+                    .put("limitCurr", this.limitCurr)
+                    .put("limitVib", this.limitVib)
+                    .put("state", this.state)
+                    .toString();
         }
     }
 }

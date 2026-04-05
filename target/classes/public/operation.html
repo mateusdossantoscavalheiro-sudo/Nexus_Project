@@ -2,286 +2,476 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>NEXUS - Operator IHM</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS INDUSTRIAL | OPERATOR HMI</title>
     <style>
-        /* 1. PROFESSIONAL INDUSTRIAL THEME */
+        /* INDUSTRIAL HMI THEME */
         :root {
-            --bg: #0f0f0f; --card: #1a1a1a; --text: #f0f0f0;
-            --green: #2ecc71; --yellow: #f1c40f; --red: #e74c3c; --blue: #3498db;
+            --bg-base: #0a0a0a;
+            --panel-bg: #141414;
+            --panel-border: #333;
+            --text-main: #e0e0e0;
+            --text-muted: #777;
+            --accent-blue: #00bcd4;
+            --state-operating: #2ecc71;
+            --state-stopped: #95a5a6;
+            --state-failure: #ff5252;
+            --font-mono: 'Courier New', Courier, monospace;
         }
 
         body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: var(--bg); color: var(--text);
-            display: flex; flex-direction: column; align-items: center;
-            margin: 0; overflow-x: hidden;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
 
-        /* 2. NAVIGATION & HEADER */
+        /* HEADER PANEL */
         header {
-            background: #000; width: 100%; padding: 10px 30px;
-            display: flex; justify-content: space-between; align-items: center;
-            border-bottom: 3px solid var(--blue); box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-            box-sizing: border-box;
+            background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%);
+            border-bottom: 2px solid var(--accent-blue);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 10px rgba(0,255,255,0.1);
+        }
+
+        .header-title {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header-title h1 {
+            margin: 0;
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            color: var(--accent-blue);
+        }
+
+        .header-title span {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            letter-spacing: 1px;
         }
 
         .btn-logout {
-            padding: 8px 20px; background: transparent; border: 1px solid var(--red);
-            color: var(--red); font-size: 0.8rem; cursor: pointer; transition: 0.3s;
-            border-radius: 4px; font-weight: bold;
+            background: transparent;
+            border: 1px solid var(--text-muted);
+            color: var(--text-main);
+            padding: 5px 15px;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: 0.2s;
+            text-transform: uppercase;
+            font-size: 0.8rem;
         }
-        .btn-logout:hover { background: var(--red); color: white; }
 
-        /* 3. ASSET SELECTION AREA */
-        .selection-area { margin-top: 20px; text-align: center; }
-        .engine-select {
-            background: #1a1a1a; color: white; border: 1px solid var(--blue);
-            padding: 10px; border-radius: 5px; width: 260px; outline: none; font-weight: bold;
+        .btn-logout:hover {
+            border-color: var(--state-failure);
+            color: var(--state-failure);
         }
-        .engine-select:disabled { opacity: 0.5; cursor: not-allowed; border-color: #444; }
 
-        /* 4. DYNAMIC STATUS BANNER */
-        .status-banner {
-            padding: 15px 50px; border-radius: 8px; font-weight: bold;
-            margin: 25px 0; font-size: 1.4rem; transition: 0.5s;
-            text-transform: uppercase; border: 1px solid rgba(255,255,255,0.1);
+        /* MAIN LAYOUT */
+        .hmi-layout {
+            display: grid;
+            grid-template-columns: 250px 1fr 300px;
+            flex: 1;
+            gap: 15px;
+            padding: 15px;
+            box-sizing: border-box;
         }
-        .OPERATING { background: var(--green); color: black; box-shadow: 0 0 15px var(--green); }
-        .STOPPED { background: #444; color: #bbb; }
-        .LOCKED_FAILURE { background: var(--red); color: white; animation: blink 0.8s infinite; box-shadow: 0 0 20px var(--red); }
-        .MAINTENANCE { background: var(--blue); color: white; box-shadow: 0 0 15px var(--blue); }
 
-        @keyframes blink { 50% { opacity: 0.3; } }
-
-        /* 5. TELEMETRY DASHBOARD GRID */
-        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; width: 90%; max-width: 1100px; }
-        .card { background: var(--card); padding: 25px; border-radius: 12px; text-align: center; border: 2px solid #222; transition: 0.3s; }
-        .card-title { font-size: 0.8rem; color: #777; letter-spacing: 1px; margin-bottom: 10px; }
-        .value { font-size: 3rem; font-weight: 800; margin: 10px 0; font-family: 'Courier New', monospace; }
-        .unit { font-size: 0.9rem; color: #555; letter-spacing: 1px; }
-
-        /* 6. INDUSTRIAL CONTROLS */
-        .controls {
-            margin-top: 40px; background: var(--card); padding: 30px;
-            border-radius: 15px; display: flex; gap: 20px;
-            border: 1px solid #333; margin-bottom: 40px;
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 5px;
+            padding: 15px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
         }
-        .controls button {
-            padding: 18px 35px; border: none; border-radius: 8px;
-            cursor: pointer; font-weight: bold; transition: 0.2s;
-            font-size: 1rem; text-transform: uppercase;
-        }
-        .controls button:active { transform: scale(0.95); }
-        .controls button:disabled { opacity: 0.15; cursor: not-allowed; filter: grayscale(1); }
 
-        .btn-start { background: var(--green); color: black; }
-        .btn-stop { background: var(--red); color: white; }
-        .btn-maint { background: var(--blue); color: white; }
+        .panel-title {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--panel-border);
+            padding-bottom: 5px;
+            margin-bottom: 15px;
+        }
+
+        /* LEFT SIDEBAR: ASSET SELECTION */
+        .selector-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        select {
+            background: #000;
+            color: var(--accent-blue);
+            border: 1px solid var(--accent-blue);
+            padding: 10px;
+            font-size: 1rem;
+            font-family: var(--font-mono);
+            outline: none;
+            cursor: pointer;
+        }
+
+        .system-status {
+            margin-top: auto;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* CENTER: MOTOR GRAPHIC */
+        .center-display {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .motor-graphic {
+            width: 250px;
+            height: 250px;
+            margin-bottom: 20px;
+        }
+
+        /* SVG Dynamic Classes */
+        .svg-operating { stroke: var(--state-operating); filter: drop-shadow(0 0 10px var(--state-operating)); }
+        .svg-stopped { stroke: var(--state-stopped); }
+        .svg-failure { stroke: var(--state-failure); filter: drop-shadow(0 0 10px var(--state-failure)); animation: blink 1s infinite; }
+
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+
+        .state-label {
+            font-size: 1.5rem;
+            font-weight: bold;
+            letter-spacing: 2px;
+            padding: 5px 20px;
+            border-radius: 3px;
+            background: #000;
+            border: 1px solid #333;
+        }
+
+        .label-operating { color: var(--state-operating); border-color: var(--state-operating); }
+        .label-stopped { color: var(--state-stopped); }
+        .label-failure { color: var(--state-failure); border-color: var(--state-failure); }
+
+        /* RIGHT: TELEMETRY VALUES */
+        .telemetry-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            flex: 1;
+        }
+
+        .telemetry-box {
+            background: #000;
+            border: 1px solid var(--panel-border);
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-left: 4px solid #333;
+            transition: 0.3s;
+        }
+
+        .telemetry-box span {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .telemetry-value {
+            font-family: var(--font-mono);
+            font-size: 1.8rem;
+            color: #fff;
+            margin-top: 5px;
+        }
+
+        /* FOOTER: CONTROLS */
+        .controls-panel {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            padding: 10px;
+            background: #0f0f0f;
+            border-top: 1px solid var(--panel-border);
+        }
+
+        .btn-industrial {
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #000;
+            transition: 0.1s;
+        }
+
+        .btn-industrial:active:not(:disabled) {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 #000;
+        }
+
+        .btn-industrial:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-start { background: var(--state-operating); color: #000; }
+        .btn-stop { background: var(--state-failure); color: #fff; }
+        .btn-reset { background: var(--accent-blue); color: #000; }
+
     </style>
 </head>
 <body>
 
 <header>
-    <div style="text-align: left;">
-        <h1 style="margin: 0; font-size: 1.5rem; letter-spacing: 1px;">NEXUS INDUSTRIAL | <span style="color: var(--blue);">IHM OPERADOR</span></h1>
-        <div style="color: #555; font-size: 0.8rem;">CORE SYSTEM v1.1 - ENHANCED SECURITY</div>
+    <div class="header-title">
+        <h1>NEXUS INDUSTRIAL | OPERATOR HMI</h1>
+        <span>CORE SYSTEM v4.0 - ENHANCED SYSTEM</span>
     </div>
-    <button class="btn-logout" onclick="doLogout()">LOGOUT</button>
+    <button class="btn-logout" onclick="window.location.href='index.html'">Logout</button>
 </header>
 
-<div class="selection-area">
-    <label style="font-size: 0.8rem; color: #777; display: block; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Active Machine Selection</label>
-    <select id="asset-select" class="engine-select" onchange="updateSelectedAsset()">
-    </select>
-</div>
+<div class="hmi-layout">
 
-<div id="state-display" class="status-banner STOPPED">STATUS: DISCONNECTED</div>
+    <div class="panel">
+        <div class="panel-title">Asset Control</div>
+        <div class="selector-group">
+            <label for="assetSelect" style="font-size: 0.8rem; color: #777;">Target Equipment</label>
+            <select id="assetSelect" onchange="changeAsset()">
+                <option value="">Awaiting Data...</option>
+            </select>
+        </div>
 
-<div class="dashboard">
-    <div class="card" id="card-temp">
-        <div class="card-title">MOTOR TEMPERATURE</div>
-        <div class="value" id="val-temp">--</div>
-        <div class="unit">CELSIUS</div>
+        <div class="system-status">
+            <p id="ws-status">Network: CONNECTING...</p>
+            <p>Protocol: MQTT via Core</p>
+        </div>
     </div>
-    <div class="card" id="card-curr">
-        <div class="card-title">ELECTRICAL LOAD</div>
-        <div class="value" id="val-curr">--</div>
-        <div class="unit">AMPERES</div>
-    </div>
-    <div class="card" id="card-humi">
-        <div class="card-title">AMBIENT HUMIDITY</div>
-        <div class="value" id="val-humi">--</div>
-        <div class="unit">PERCENTAGE</div>
-    </div>
-    <div class="card" id="card-vib">
-        <div class="card-title">AXIAL VIBRATION</div>
-        <div class="value" id="val-vib">--</div>
-        <div class="unit">mm/s (X)</div>
-    </div>
-</div>
 
-<div class="controls">
-    <button class="btn-start" id="btn-start" onclick="sendCommand('START')">Start Motor</button>
-    <button class="btn-stop" id="btn-stop" onclick="sendCommand('STOP')">Emergency Stop</button>
-    <button class="btn-maint" id="btn-maint" onclick="sendCommand('MAINTENANCE')">Maintenance</button>
+    <div class="panel center-display">
+        <div class="panel-title" style="align-self: flex-start;">Real-Time Diagnostic</div>
+
+        <svg viewBox="0 0 100 100" class="motor-graphic svg-stopped" id="motor-svg" fill="none" stroke-width="2">
+            <rect x="10" y="80" width="80" height="10" fill="#222" stroke="currentColor"/>
+            <rect x="20" y="30" width="60" height="50" rx="5" fill="#111" stroke="currentColor"/>
+            <line x1="30" y1="30" x2="30" y2="80" stroke="currentColor"/>
+            <line x1="40" y1="30" x2="40" y2="80" stroke="currentColor"/>
+            <line x1="50" y1="30" x2="50" y2="80" stroke="currentColor"/>
+            <line x1="60" y1="30" x2="60" y2="80" stroke="currentColor"/>
+            <line x1="70" y1="30" x2="70" y2="80" stroke="currentColor"/>
+            <rect x="80" y="45" width="15" height="10" fill="#333" stroke="currentColor"/>
+            <circle cx="20" cy="55" r="15" fill="#111" stroke="currentColor"/>
+        </svg>
+
+        <div id="state-display" class="state-label label-stopped">NO CONNECTION</div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title">Live Telemetry</div>
+        <div class="telemetry-grid">
+            <div class="telemetry-box" id="box-temp">
+                <span>Temperature</span>
+                <div class="telemetry-value" id="val-temp">-- °C</div>
+            </div>
+            <div class="telemetry-box" id="box-curr">
+                <span>Current</span>
+                <div class="telemetry-value" id="val-curr">-- A</div>
+            </div>
+            <div class="telemetry-box" id="box-vib">
+                <span>Vibration</span>
+                <div class="telemetry-value" id="val-vib">-- mm/s</div>
+            </div>
+            <div class="telemetry-box" id="box-humi">
+                <span>Humidity</span>
+                <div class="telemetry-value" id="val-humi">-- %</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="controls-panel">
+        <button class="btn-industrial btn-start" id="btn-start" onclick="sendCommand('START')" disabled>START</button>
+        <button class="btn-industrial btn-stop" id="btn-stop" onclick="sendCommand('STOP')" disabled>STOP</button>
+        <button class="btn-industrial btn-reset" id="btn-reset" onclick="sendCommand('RESET')" disabled>SYS RESET</button>
+    </div>
+
 </div>
 
 <script>
-    // Global connection state
     let ws;
     let currentAssetId = null;
 
-    /**
-     * INITIALIZATION
-     * Syncs the machine inventory and establishes the telemetry link.
-     */
-    window.onload = async () => {
-        await syncAssetList();
-
-        // Add event listener to the dropdown to trigger context switch
-        document.getElementById('asset-select').addEventListener('change', updateSelectedAsset);
-
+    window.onload = () => {
+        fetchAssets();
         connectWebSocket();
     };
 
-    /**
-     * ASSET SYNCHRONIZATION
-     * Pulls the fleet list from the Java API to ensure IDs match the database.
-     */
-    async function syncAssetList() {
-        try {
-            const response = await fetch('/api/assets');
-            if (!response.ok) throw new Error("Backend unreachable");
-
-            const assets = await response.json();
-            const selectEl = document.getElementById('asset-select');
-            selectEl.innerHTML = '';
-
-            assets.forEach(asset => {
-                let opt = document.createElement('option');
-                opt.value = asset.id;
-                opt.innerHTML = `[ID:00${asset.id}] - ${asset.name}`;
-                selectEl.appendChild(opt);
-            });
-
-            // Auto-select the first asset if none is active
-            if (assets.length > 0 && currentAssetId === null) {
-                currentAssetId = assets[0].id;
-                // Notify backend of the initial selected ID
-                setTimeout(() => notifyBackendContextSwitch(), 1000);
-            }
-        } catch (error) {
-            console.error("[NEXUS] CONFIG ERROR:", error);
-            document.getElementById('state-display').innerText = "CONFIG ERROR: NO API ACCESS";
-        }
+    function fetchAssets() {
+        // Updated to fetch directly from the current domain
+        fetch('/api/assets')
+            .then(response => response.json())
+            .then(data => {
+                const select = document.getElementById('assetSelect');
+                select.innerHTML = '';
+                if(data.length === 0) {
+                    select.innerHTML = '<option>No assets registered</option>';
+                    return;
+                }
+                data.forEach(motor => {
+                    let opt = document.createElement('option');
+                    opt.value = motor.id;
+                    opt.textContent = `ID ${motor.id} - ${motor.name}`;
+                    select.appendChild(opt);
+                });
+                currentAssetId = select.value;
+            })
+            .catch(err => console.error("[NEXUS] API Fetch Error:", err));
     }
 
-    /**
-     * CONTEXT SWITCHING
-     * Clears UI data and notifies the Java/ESP32 layer of the new target ID.
-     */
-    function updateSelectedAsset() {
-        currentAssetId = document.getElementById('asset-select').value;
-        console.log("[NEXUS] Switching operator context to Asset ID:", currentAssetId);
+    function changeAsset() {
+        currentAssetId = document.getElementById('assetSelect').value;
+        console.log("[NEXUS] Switched monitoring to Asset ID:", currentAssetId);
 
-        // Reset display values to prevent "ghost" readings from the previous asset
-        document.getElementById('val-temp').innerText = "--";
-        document.getElementById('val-curr').innerText = "--";
-        document.getElementById('val-humi').innerText = "--";
-        document.getElementById('val-vib').innerText = "--";
-
-        // Dispatch command to change the simulated hardware ID
-        notifyBackendContextSwitch();
+        // Clear UI values while waiting for new data
+        document.getElementById('val-temp').innerText = "-- °C";
+        document.getElementById('val-curr').innerText = "-- A";
+        document.getElementById('val-vib').innerText = "-- mm/s";
+        document.getElementById('val-humi').innerText = "-- %";
+        updateMotorState("UNKNOWN");
     }
 
-    function notifyBackendContextSwitch() {
-        if (ws && ws.readyState === WebSocket.OPEN && currentAssetId) {
-            ws.send(`SWITCH_ID:${currentAssetId}`);
-            console.log("[NEXUS] Instructed hardware to simulate Asset ID:", currentAssetId);
-        }
-    }
-
-    /**
-     * REAL-TIME TELEMETRY LINK
-     * Connects via WebSocket for sub-second updates from the ESP32/Java bridge.
-     */
     function connectWebSocket() {
-
+        // WSS for HTTPS (Render), WS for local HTTP
         const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-        ws = new WebSocket(wsProtocol + window.location.host + "/nexus");
+        const wsUrl = wsProtocol + window.location.host + "/ws";
+
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            console.log("[NEXUS] WebSocket Connected.");
+            document.getElementById('ws-status').innerText = "Network: ONLINE";
+            document.getElementById('ws-status').style.color = "var(--state-operating)";
+        };
 
         ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
+            try {
+                const data = JSON.parse(event.data);
 
-            // DATA SEGREGATION: Only process data for the machine currently on-screen
-            if (String(data.id) !== String(currentAssetId)) return;
-
-            // 1. Update Numeric Values
-            document.getElementById('val-temp').innerText = data.temp.toFixed(1);
-            document.getElementById('val-curr').innerText = data.curr.toFixed(2);
-            document.getElementById('val-humi').innerText = data.humi.toFixed(0);
-            document.getElementById('val-vib').innerText = data.vib.toFixed(2);
-
-            // 2. Update Status Banner
-            const banner = document.getElementById('state-display');
-            banner.innerText = "STATUS: " + data.state;
-            banner.className = "status-banner " + data.state;
-
-            // 3. Safety Lock Management (NEW LOGIC)
-            const assetSelect = document.getElementById('asset-select');
-            const startBtn = document.getElementById('btn-start');
-
-            if (data.state === 'LOCKED_FAILURE') {
-                assetSelect.disabled = true; // Block switching during critical failure
-                startBtn.disabled = true;    // Prevent starting a broken machine
-            } else if (data.state === 'OPERATING') {
-                assetSelect.disabled = true; // NEW: Cannot switch machines while running
-                startBtn.disabled = true;    // Already running
-            } else {
-                // State is STOPPED or IDLE
-                assetSelect.disabled = false;
-                startBtn.disabled = false;
+                // Only process data if it matches the currently selected dropdown ID
+                if (currentAssetId && data.id == currentAssetId) {
+                    updateUI(data);
+                }
+            } catch (e) {
+                console.error("[NEXUS] JSON Parse Error:", e);
             }
-
-            // 4. Dynamic Visual Alerting
-            updateCardBorder('temp', data.temp, 45, data.limitTemp || 60);
-            updateCardBorder('curr', data.curr, 10, 14);
-            updateCardBorder('vib', Math.abs(data.vib), 6, 10);
         };
 
         ws.onclose = () => {
             console.warn("[NEXUS] WebSocket link lost. Reconnecting...");
-            setTimeout(connectWebSocket, 2000);
+            document.getElementById('ws-status').innerText = "Network: OFFLINE";
+            document.getElementById('ws-status').style.color = "var(--state-failure)";
+            setTimeout(connectWebSocket, 3000);
         };
     }
 
-    /**
-     * CARD HIGHLIGHTING
-     */
-    function updateCardBorder(id, value, warning, critical) {
-        const card = document.getElementById('card-' + id);
-        if (value >= critical) card.style.borderColor = 'var(--red)';
-        else if (value >= warning) card.style.borderColor = 'var(--yellow)';
-        else card.style.borderColor = '#222';
+    function updateUI(data) {
+        // Fixed variable names mapping exactly to Java backend JSON keys
+        const tempVal = data.temp !== undefined ? data.temp.toFixed(1) : "--";
+        const currVal = data.curr !== undefined ? data.curr.toFixed(2) : "--";
+        const vibVal = data.vib !== undefined ? data.vib.toFixed(1) : "--";
+        const humiVal = data.humi !== undefined ? data.humi.toFixed(1) : "--";
+
+        document.getElementById('val-temp').innerText = tempVal + " °C";
+        document.getElementById('val-curr').innerText = currVal + " A";
+        document.getElementById('val-vib').innerText = vibVal + " mm/s";
+        document.getElementById('val-humi').innerText = humiVal + " %";
+
+        updateMotorState(data.state);
+
+        // Dynamic border alerting based on limits from Java
+        checkAlert('box-temp', data.temp, data.limitTemp);
+        checkAlert('box-curr', data.curr, data.limitCurr);
+        checkAlert('box-vib', data.vib, data.limitVib);
     }
 
-    /**
-     * COMMAND TRANSMISSION
-     */
+    function updateMotorState(state) {
+        const display = document.getElementById('state-display');
+        const svg = document.getElementById('motor-svg');
+        const btnStart = document.getElementById('btn-start');
+        const btnStop = document.getElementById('btn-stop');
+        const btnReset = document.getElementById('btn-reset');
+
+        display.innerText = state || "UNKNOWN";
+
+        // Reset classes
+        display.className = "state-label";
+        svg.className.baseVal = "motor-graphic";
+
+        if (state === "OPERATING") {
+            display.classList.add("label-operating");
+            svg.classList.add("svg-operating");
+            btnStart.disabled = true;
+            btnStop.disabled = false;
+            btnReset.disabled = true;
+        } else if (state === "LOCKED_FAILURE") {
+            display.classList.add("label-failure");
+            svg.classList.add("svg-failure");
+            btnStart.disabled = true;
+            btnStop.disabled = true;
+            btnReset.disabled = false;
+        } else { // STOPPED or IDLE
+            display.classList.add("label-stopped");
+            svg.classList.add("svg-stopped");
+            btnStart.disabled = false;
+            btnStop.disabled = true;
+            btnReset.disabled = true;
+        }
+    }
+
+    function checkAlert(elementId, currentValue, limitValue) {
+        const box = document.getElementById(elementId);
+        if (!currentValue || !limitValue) return;
+
+        // Simple threshold check: if within 10% of limit, warning. If over limit, critical.
+        if (currentValue >= limitValue) {
+            box.style.borderLeftColor = "var(--state-failure)";
+        } else if (currentValue >= (limitValue * 0.9)) {
+            box.style.borderLeftColor = "#f39c12"; // Warning orange
+        } else {
+            box.style.borderLeftColor = "#333"; // Normal
+        }
+    }
+
     function sendCommand(cmd) {
         if (ws && ws.readyState === WebSocket.OPEN && currentAssetId) {
             const payload = `${currentAssetId}:${cmd}`;
             ws.send(payload);
-            console.log("[NEXUS] Command Sent:", payload);
+            console.log("[NEXUS] Sent Command:", payload);
         } else {
-            alert("Error: No connection to Command Server.");
+            alert("Cannot send command. WebSocket is not connected.");
         }
     }
-
-    function doLogout() {
-        window.location.href = 'index.html';
-    }
 </script>
-
 </body>
 </html>
