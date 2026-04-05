@@ -215,11 +215,32 @@
     window.onload = async () => {
         initCharts();
         await syncAssetList(); // Load real assets from Java
+        loadMotors();
         refreshDashboard();
 
         // Auto-refresh every 5 seconds to keep data current
         setInterval(refreshDashboard, 5000);
     };
+
+    async function loadMotors() {
+        try {
+            const response = await fetch('/api/assets');
+            const motors = await response.json();
+            const select = document.getElementById('motorSelect');
+
+            select.innerHTML = '<option value=\"all\">All Assets (Overview)</option>';
+
+            motors.forEach(motor => {
+                const option = document.createElement('option');
+                option.value = motor.id;
+                option.textContent = `Asset #00${motor.id} - ${motor.name}`;
+                select.appendChild(option);
+            });
+            console.log(\"[NEXUS] Motors loaded into Management\");
+        } catch (err) {
+            console.error(\"[NEXUS] Failed to load motors for management:\", err);
+        }
+    }
 
     /**
      * 2. ASSET SYNCING
