@@ -1,6 +1,6 @@
 public class DatabaseConfig {
 
-    private static final String SUPABASE_URI = "jdbc:postgresql://postgres:%zVN/.2BzF$rUKK@db.mvjpcsmurtsimsysrexf.supabase.co:5432/postgres";
+    private static final String SUPABASE_URI = "jdbc:postgresql://db.mvjpcsmurtsimsysrexf.supabase.co:5432/postgres";
     private static final String SUPABASE_USER = "postgres";
     private static final String SUPABASE_PASS = "%zVN/.2BzF$rUKK";
 
